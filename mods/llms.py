@@ -6,6 +6,7 @@ with support for text generation, embeddings, and streaming responses.
 Supported providers:
 - Ollama (local models)
 - Google AI (cloud-based models)
+- OpenRouter (various cloud models)
 
 Features:
 - Automatic model pulling for Ollama
@@ -15,6 +16,8 @@ Features:
 - Performance metrics
 - Thinking tokens parsing and analysis
 - Chat logging
+- Memory management for conversations
+- Token optimization
 """
 
 import asyncio
@@ -33,12 +36,14 @@ from typing import (
     Dict,
     List,
     Optional,
+    Set,
     Tuple,
     Union,
 )
 
 import google.generativeai as genai
 import ollama
+import requests
 from dotenv import load_dotenv
 from ollama import AsyncClient as OllamaAsyncClient
 
@@ -58,6 +63,185 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
 DESCRIPTION_MODEL: str = os.getenv("DESCRIPTION_MODEL")
 
 CHAT_LOGS_ENABLED: bool = os.getenv("CHAT_LOGS", "FALSE").upper() == "TRUE"
+MEMORY_ENABLED: bool = os.getenv("MEMORY_ENABLED", "TRUE").upper() == "TRUE"
+MAX_MEMORY_ITEMS: int = int(os.getenv("MAX_MEMORY_ITEMS", "10"))
+
+
+class ConversationMemory:
+    """Manages memory for AI conversations to provide context and reduce redundant API calls."""
+
+    def __init__(self, max_items: int = MAX_MEMORY_ITEMS) -> None:
+        """Initialize the conversation memory.
+
+        Args:
+            max_items (int): Maximum number of memory items to store.
+        """
+        self.memories: List[Dict[str, Any]] = []
+        self.max_items: int = max_items
+        self.embeddings_cache: Dict[str, List[float]] = {}
+        self.logger: logging.Logger = logging.getLogger("VerbalCodeAI.LLMs.Memory")
+
+    def add_memory(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """Add a new memory item.
+
+        Args:
+            content (str): The memory content.
+            metadata (Optional[Dict[str, Any]]): Additional metadata for the memory.
+        """
+        if not content.strip():
+            return
+
+        memory_item = {
+            "content": content,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "metadata": metadata or {},
+        }
+
+        for existing in self.memories:
+            if existing["content"] == content:
+                existing["timestamp"] = memory_item["timestamp"]
+                existing["metadata"].update(memory_item["metadata"])
+                return
+
+        self.memories.append(memory_item)
+
+        if len(self.memories) > self.max_items:
+            self.memories = self.memories[-self.max_items:]
+
+        if content in self.embeddings_cache:
+            del self.embeddings_cache[content]
+
+        self.logger.debug(f"Added memory: {content[:50]}...")
+
+    def _get_embedding(self, text: str) -> List[float]:
+        """Get embedding for text, using cache if available.
+
+        Args:
+            text (str): Text to get embedding for.
+
+        Returns:
+            List[float]: Embedding vector.
+        """
+        if text in self.embeddings_cache:
+            return self.embeddings_cache[text]
+
+        try:
+            embedding = generate_embed(text)
+            self.embeddings_cache[text] = embedding
+            return embedding
+        except Exception as e:
+            self.logger.error(f"Error generating embedding: {e}")
+            return []
+
+    def _calculate_similarity(self, query_embedding: List[float], memory_embedding: List[float]) -> float:
+        """Calculate cosine similarity between two embeddings.
+
+        Args:
+            query_embedding (List[float]): Query embedding.
+            memory_embedding (List[float]): Memory embedding.
+
+        Returns:
+            float: Similarity score between 0 and 1.
+        """
+        if not query_embedding or not memory_embedding:
+            return 0.0
+
+        dot_product = sum(a * b for a, b in zip(query_embedding, memory_embedding))
+
+        magnitude_a = sum(a * a for a in query_embedding) ** 0.5
+        magnitude_b = sum(b * b for b in memory_embedding) ** 0.5
+
+        if magnitude_a == 0 or magnitude_b == 0:
+            return 0.0
+
+        return dot_product / (magnitude_a * magnitude_b)
+
+    def get_relevant_memories(self, query: str, max_results: int = 3, similarity_threshold: float = 0.5) -> List[str]:
+        """Get memories relevant to the current query using semantic search.
+
+        Args:
+            query (str): The current query.
+            max_results (int): Maximum number of relevant memories to return.
+            similarity_threshold (float): Minimum similarity score to include a memory.
+
+        Returns:
+            List[str]: List of relevant memory contents.
+        """
+        if not self.memories:
+            return []
+
+        try:
+            query_embedding = self._get_embedding(query)
+
+            if not query_embedding:
+                self.logger.warning("Falling back to recency-based memory retrieval")
+                return [m["content"] for m in self.memories[-max_results:]]
+
+            memory_scores = []
+            for memory in self.memories:
+                content = memory["content"]
+                memory_embedding = self._get_embedding(content)
+
+                if memory_embedding:
+                    similarity = self._calculate_similarity(query_embedding, memory_embedding)
+                    memory_scores.append((content, similarity))
+                else:
+                    memory_scores.append((content, 0.0))
+
+            memory_scores.sort(key=lambda x: x[1], reverse=True)
+
+            relevant_memories = [
+                content for content, score in memory_scores if score >= similarity_threshold
+            ][:max_results]
+
+            if not relevant_memories and self.memories:
+                return [self.memories[-1]["content"]]
+
+            return relevant_memories
+
+        except Exception as e:
+            self.logger.error(f"Error in semantic memory retrieval: {e}")
+            return [m["content"] for m in self.memories[-max_results:]]
+
+    def clear(self) -> None:
+        """Clear all memories."""
+        self.memories = []
+        self.embeddings_cache = {}
+        self.logger.debug("Cleared all memories")
+
+    def format_for_prompt(self, query: str = "", max_items: int = 3) -> str:
+        """Format memories for inclusion in a prompt.
+
+        Args:
+            query (str): The current query to find relevant memories.
+            max_items (int): Maximum number of memories to include.
+
+        Returns:
+            str: Formatted memories string.
+        """
+        if not self.memories:
+            return ""
+
+        if query:
+            relevant_memories = self.get_relevant_memories(query, max_results=max_items)
+            if not relevant_memories:
+                return ""
+
+            formatted = "Previous information from this conversation that may be relevant to your query:\n"
+
+            for i, memory_content in enumerate(relevant_memories, 1):
+                formatted += f"{i}. {memory_content}\n"
+        else:
+            recent_memories = self.memories[-max_items:]
+            formatted = "Previous information from this conversation:\n"
+
+            for i, memory in enumerate(recent_memories, 1):
+                formatted += f"{i}. {memory['content']}\n"
+
+        return formatted
+
+
+conversation_memory = ConversationMemory()
 
 
 @dataclass
@@ -76,9 +260,7 @@ class ThinkTokens:
         return f"Thinking tokens: {self.total_tokens}, Words: {self.total_words}"
 
 
-def parse_thinking_tokens(
-    response: str,
-) -> Tuple[str, ThinkTokens, str]:
+def parse_thinking_tokens(response: str) -> Tuple[str, ThinkTokens, str]:
     """Parse thinking tokens from an AI response.
 
     Args:
@@ -144,6 +326,7 @@ PERFORMANCE_METRICS: Dict[
     "provider_stats": {
         "ollama": {"requests": 0, "time": 0.0},
         "google": {"requests": 0, "time": 0.0},
+        "openrouter": {"requests": 0, "time": 0.0},
     },
 }
 
@@ -169,19 +352,22 @@ CODE:
 {code}
 
 Respond with a clear, concise description (2-3 sentences) that explains what this code does.
+Include the primary purpose, key components, and any notable design patterns or techniques used.
 """,
 
     "code_summary": """Summarize the following code file:```
 {code}```
 
 Provide a comprehensive summary that includes:
-1. The main purpose of the code
-2. Key functions/classes and their responsibilities
-3. Important algorithms or patterns used
-4. Dependencies and external interactions
-5. Any notable optimizations or design decisions
+1. The main purpose of the code and its role in the larger system
+2. Key functions/classes and their responsibilities with brief explanations of their interfaces
+3. Important algorithms or patterns used and why they were chosen
+4. Dependencies and external interactions, including any APIs or libraries leveraged
+5. Any notable optimizations or design decisions that impact performance or maintainability
+6. Potential areas for improvement or technical debt
 
-Your summary should be detailed enough for a developer to understand the code's functionality without reading it.
+Your summary should be detailed enough for a developer to understand the code's functionality without reading it,
+while highlighting the most important aspects that would be relevant for maintenance or extension.
 """,
 
     "error_analysis": """Analyze the following error and suggest possible solutions:
@@ -195,9 +381,11 @@ Code context:
 ```
 
 Provide:
-1. A clear explanation of what's causing the error
-2. At least 2-3 potential solutions, with code examples
+1. A clear explanation of what's causing the error, including the specific line or operation that's failing
+2. At least 2-3 potential solutions, with code examples that can be directly implemented
 3. Best practices to avoid this error in the future
+4. Any diagnostic steps that could help further isolate the issue if your solutions don't resolve it
+5. Potential side effects or considerations when implementing the suggested fixes
 """,
 
     "code_improvement": """Review the following code and suggest improvements:
@@ -206,13 +394,66 @@ Provide:
 ```
 
 Focus on:
-1. Performance optimizations
-2. Code readability and maintainability
-3. Potential bugs or edge cases
-4. Better design patterns or algorithms
-5. Modern language features that could be utilized
+1. Performance optimizations that would have measurable impact
+2. Code readability and maintainability improvements
+3. Potential bugs, edge cases, or error handling gaps
+4. Better design patterns or algorithms that would simplify the code
+5. Modern language features that could be utilized to make the code more concise or safer
+6. Security considerations or potential vulnerabilities
+7. Testing strategies that would help ensure code correctness
 
-For each suggestion, provide a brief explanation of why it's an improvement and a code example.
+For each suggestion:
+- Explain why it's an improvement and what specific problem it solves
+- Provide a concrete code example showing the implementation
+- Note any trade-offs or considerations when adopting the change
+- Prioritize suggestions based on their impact and implementation difficulty
+""",
+
+    "max_mode_analysis": """You are an expert code analysis assistant with deep knowledge of software architecture and programming languages.
+Analyze the following code files and provide comprehensive insights about the codebase.
+
+CODE FILES:
+{code_files}
+
+USER QUERY:
+{query}
+
+Provide a detailed response that:
+1. Directly answers the user's query with specific references to the code
+2. Explains relevant code sections with line numbers and file names
+3. Identifies patterns, relationships, and dependencies between components
+4. Suggests improvements or solutions if applicable
+5. Includes code examples when helpful
+
+Your analysis should be thorough, technically precise, and focused on helping the user understand
+exactly how the code works in relation to their query. Prioritize depth of understanding over breadth.
+""",
+
+    "intent_detection": """Analyze the following user message and determine its intent.
+The message is from a user interacting with a code assistant AI that helps with understanding and navigating codebases.
+
+USER MESSAGE:
+{message}
+
+Classify the intent into one of these categories:
+1. GREETING: Simple greetings like "hi", "hello", "hey", etc.
+2. FAREWELL: Messages like "bye", "goodbye", "see you", etc.
+3. GRATITUDE: Messages expressing thanks like "thank you", "thanks", etc.
+4. SMALL_TALK: General chitchat not related to code or the project (e.g., "how are you?")
+5. SIMPLE_QUESTION: A simple question that doesn't require deep code analysis (e.g., "what's your name?")
+6. CODE_QUESTION: A question about code or the codebase that requires analysis (e.g., "how does this function work?", "what's this codebase about?", "explain the project structure")
+7. FEATURE_REQUEST: User asking for a new feature or enhancement (e.g., "can you add support for...")
+8. HELP_REQUEST: User asking for help with the tool itself (e.g., "how do I use this tool?")
+9. FEEDBACK: User providing feedback about the assistant (e.g., "you're doing great", "that wasn't helpful")
+10. OTHER: Any other type of message
+
+Important guidelines:
+- Questions about the codebase, project structure, or specific code should be classified as CODE_QUESTION
+- If the message asks about what the codebase does or what it's for, classify as CODE_QUESTION
+- If in doubt between SIMPLE_QUESTION and CODE_QUESTION, prefer CODE_QUESTION
+- If the message contains both a greeting and a question, prioritize the question part
+
+Respond with ONLY the category name, nothing else.
 """
 }
 
@@ -430,6 +671,8 @@ def generate_response(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
+    use_memory: bool = True,
+    add_to_memory: bool = True,
 ) -> Union[str, Tuple[str, ThinkTokens, str]]:
     """Generate a response using the chat model with enhanced features.
 
@@ -445,6 +688,8 @@ def generate_response(
         provider (Optional[str], optional): Override the AI provider. Defaults to None (use environment variable).
         api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
         model (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
+        use_memory (bool, optional): Whether to use conversation memory. Defaults to True.
+        add_to_memory (bool, optional): Whether to add the response to memory. Defaults to True.
 
     Returns:
         Union[str, Tuple[str, ThinkTokens, str]]:
@@ -489,22 +734,180 @@ def generate_response(
             user_query = msg["content"]
             break
 
-    if chat_provider.lower() == "google":
-        response = _generate_response_google(
-            messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
-        )
-    else:
-        response = _generate_response_ollama(
-            messages, system_prompt, temperature, max_tokens, chat_model
-        )
+    if MEMORY_ENABLED and use_memory and conversation_memory.memories:
+        memory_text = conversation_memory.format_for_prompt(query=user_query)
+        if memory_text:
+            if system_prompt:
+                system_prompt = f"{system_prompt}\n\n{memory_text}"
+            else:
+                system_prompt = memory_text
+            logger.debug("Added memory context to prompt using semantic search")
 
+    try:
+        if chat_provider.lower() == "google":
+            response = _generate_response_google(
+                messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
+            )
+        elif chat_provider.lower() == "openrouter":
+            try:
+                response = _generate_response_openrouter(
+                    messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
+                )
+            except Exception as e:
+                if "rate limit" in str(e).lower():
+                    logger.warning(f"OpenRouter rate limit hit. Falling back to Ollama: {str(e)}")
+                    response = _generate_response_ollama(
+                        messages, system_prompt, temperature, max_tokens, "llama3.2"
+                    )
+                else:
+                    raise
+        else:
+            response = _generate_response_ollama(
+                messages, system_prompt, temperature, max_tokens, chat_model
+            )
+    except Exception as e:
+        error_msg = f"Error generating response with provider '{chat_provider}': {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise Exception(error_msg)
+
+    chat_id = ""
     if CHAT_LOGS_ENABLED and project_path:
-        log_chat(user_query, response, project_path)
+        chat_id = log_chat(user_query, response, project_path)
+
+    if MEMORY_ENABLED and add_to_memory:
+        _, _, clean_response = parse_thinking_tokens(response)
+
+        memory_entry = create_memory_entry(user_query, clean_response)
+        if memory_entry:
+            conversation_memory.add_memory(
+                memory_entry,
+                metadata={
+                    "query": user_query,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "chat_id": chat_id
+                }
+            )
 
     if parse_thinking:
         return parse_thinking_tokens(response)
     else:
         return response
+
+
+def create_memory_entry(query: str, response: str, max_length: int = 200) -> str:
+    """Create a concise memory entry from a query and response.
+
+    Args:
+        query (str): The user's query.
+        response (str): The AI's response.
+        max_length (int, optional): Maximum length of the memory entry. Defaults to 200.
+
+    Returns:
+        str: A concise memory entry, or empty string if it couldn't be created.
+    """
+    if len(response) <= max_length:
+        return response
+
+    try:
+        if len(query) < 50:
+            prefix = f"Q: {query.strip()}\nA: "
+            max_response_length = max_length - len(prefix)
+
+            if max_response_length > 50:
+                paragraphs = [p.strip() for p in response.split('\n\n') if p.strip()]
+                if paragraphs:
+                    first_para = paragraphs[0]
+                    if len(first_para) <= max_response_length:
+                        return prefix + first_para
+
+                    sentences = [s.strip() for s in first_para.split('.') if s.strip()]
+                    result = ""
+                    for sentence in sentences:
+                        if len(result) + len(sentence) + 1 <= max_response_length:
+                            result += sentence + "."
+                        else:
+                            break
+
+                    if result:
+                        return prefix + result
+
+        paragraphs = [p.strip() for p in response.split('\n\n') if p.strip()]
+        if paragraphs:
+            first_para = paragraphs[0]
+            if len(first_para) <= max_length:
+                return first_para
+
+            sentences = [s.strip() for s in first_para.split('.') if s.strip()]
+            result = ""
+            for sentence in sentences:
+                if len(result) + len(sentence) + 1 <= max_length:
+                    result += sentence + "."
+                else:
+                    break
+
+            if result:
+                return result
+
+        return response[:max_length] + "..."
+    except Exception as e:
+        logger.error(f"Error creating memory entry: {e}")
+        return response[:max_length] + "..."
+
+
+def detect_intent(query: str) -> str:
+    """Detect the intent of a user query using the LLM.
+
+    Args:
+        query (str): The user query.
+
+    Returns:
+        str: The detected intent category.
+    """
+    logger.debug(f"Detecting intent for query: {query}")
+
+    if len(query.strip()) <= 5:
+        lower_query = query.lower().strip()
+        if lower_query in ["hi", "hey", "hello"]:
+            logger.debug("Quick intent detection: GREETING")
+            return "GREETING"
+        if lower_query in ["bye", "goodbye"]:
+            logger.debug("Quick intent detection: FAREWELL")
+            return "FAREWELL"
+        if lower_query in ["thanks", "thx", "ty"]:
+            logger.debug("Quick intent detection: GRATITUDE")
+            return "GRATITUDE"
+
+    try:
+        template_vars = {"message": query}
+        intent_response = generate_response(
+            messages=[],
+            template_name="intent_detection",
+            template_vars=template_vars,
+            temperature=0.1,
+            parse_thinking=False,
+            use_memory=False,
+            add_to_memory=False
+        )
+
+        intent = intent_response.strip().upper()
+
+        valid_intents = [
+            "GREETING", "FAREWELL", "GRATITUDE", "SMALL_TALK",
+            "SIMPLE_QUESTION", "CODE_QUESTION", "FEATURE_REQUEST",
+            "HELP_REQUEST", "FEEDBACK", "OTHER"
+        ]
+
+        if intent in valid_intents:
+            logger.debug(f"LLM detected intent: {intent}")
+            return intent
+        else:
+            logger.warning(f"Invalid intent detected: {intent}, defaulting to CODE_QUESTION")
+            return "CODE_QUESTION"
+
+    except Exception as e:
+        logger.error(f"Error detecting intent: {e}")
+        return "CODE_QUESTION"
+
 
 @track_performance("google")
 def _generate_response_google(
@@ -558,6 +961,7 @@ def _generate_response_google(
                 {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
             ],
+            system_instruction=system_prompt
         )
 
         chat_history = []
@@ -566,7 +970,7 @@ def _generate_response_google(
             chat_history.append({"role": role, "parts": msg["content"]})
 
         if system_prompt:
-            response = model.generate_content(chat_history, system_instruction=system_prompt)
+            response = model.generate_content(chat_history)
         else:
             response = model.generate_content(chat_history)
 
@@ -574,6 +978,133 @@ def _generate_response_google(
     except Exception as e:
         logger.error(f"Google API error with model {chat_model}: {str(e)}", exc_info=True)
         raise Exception(f"Google API error with model {chat_model}: {str(e)}")
+
+
+@track_performance("openrouter")
+def _generate_response_openrouter(
+    messages: List[Dict[str, str]],
+    system_prompt: Optional[str] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+) -> str:
+    """Generate a response using OpenRouter.
+
+    Args:
+        messages (List[Dict[str, str]]): Validated message list.
+        system_prompt (Optional[str], optional): System prompt. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to 0.7.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
+        model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
+
+    Returns:
+        str: Generated response.
+
+    Raises:
+        Exception: If OpenRouter API encounters an error.
+    """
+    import time
+
+    chat_api_key = api_key or AI_CHAT_API_KEY
+    chat_model = model_name or CHAT_MODEL
+
+    if not chat_api_key or chat_api_key.lower() == "none":
+        raise ValueError("API key not set for OpenRouter provider")
+
+    formatted_messages = []
+
+    if system_prompt:
+        formatted_messages.append({"role": "system", "content": system_prompt})
+
+    formatted_messages.extend(messages)
+
+    payload = {
+        "model": chat_model,
+        "messages": formatted_messages,
+        "temperature": temperature,
+    }
+
+    if max_tokens:
+        payload["max_tokens"] = max_tokens
+
+    headers = {
+        "Authorization": f"Bearer {chat_api_key}",
+        "Content-Type": "application/json"
+    }
+
+    max_retries = 3
+    retry_delay = 2
+
+    for retry in range(max_retries):
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('X-RateLimit-Reset', 0)) / 1000 - time.time()
+                if retry_after <= 0:
+                    retry_after = retry_delay * (2 ** retry)
+
+                logger.warning(f"OpenRouter rate limit hit. Retrying in {retry_after:.1f} seconds. Attempt {retry+1}/{max_retries}")
+
+                if retry < max_retries - 1:
+                    time.sleep(min(retry_after, 15))
+                    continue
+                else:
+                    error_data = response.json() if response.text else {}
+                    error_msg = error_data.get('error', {}).get('message', 'Rate limit exceeded')
+                    raise Exception(f"Rate limit exceeded: {error_msg}. Try again in a few minutes or switch to a different provider.")
+
+            if response.status_code != 200:
+                error_message = f"OpenRouter API error: {response.status_code} - {response.text}"
+                logger.error(error_message)
+
+                if retry < max_retries - 1 and response.status_code >= 500:
+                    delay = retry_delay * (2 ** retry)
+                    logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(error_message)
+
+            response_data = response.json()
+
+            if "choices" not in response_data or len(response_data["choices"]) == 0:
+                error_message = "OpenRouter API returned no choices"
+                logger.warning(f"{error_message}. Attempt {retry+1}/{max_retries}")
+
+                if retry < max_retries - 1:
+                    delay = retry_delay * (2 ** retry)
+                    logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(error_message)
+
+            message_content = response_data["choices"][0]["message"]["content"]
+            return message_content
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error when calling OpenRouter API: {str(e)}", exc_info=True)
+
+            if retry < max_retries - 1:
+                delay = retry_delay * (2 ** retry)
+                logger.warning(f"Network error. Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                time.sleep(delay)
+            else:
+                raise Exception(f"Network error when calling OpenRouter API: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"OpenRouter API error with model {chat_model}: {str(e)}", exc_info=True)
+            raise Exception(f"OpenRouter API error with model {chat_model}: {str(e)}")
+
+    raise Exception(f"Failed to get response from OpenRouter after {max_retries} attempts")
 
 
 @track_performance("ollama")
@@ -630,7 +1161,9 @@ async def generate_response_stream(
     project_path: Optional[str] = None,
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    use_memory: bool = True,
+    add_to_memory: bool = True
 ) -> AsyncGenerator[str, None]:
     """Generate a streaming response using the chat model.
 
@@ -647,6 +1180,10 @@ async def generate_response_stream(
             Override the API key. Defaults to None (use environment variable).
         model (Optional[str], optional):
             Override the model name. Defaults to None (use environment variable).
+        use_memory (bool, optional):
+            Whether to use conversation memory. Defaults to True.
+        add_to_memory (bool, optional):
+            Whether to add the response to memory. Defaults to True.
 
     Yields:
         AsyncGenerator[str, None]: Generated response text chunks.
@@ -668,6 +1205,15 @@ async def generate_response_stream(
         if msg["role"] == "user":
             user_query = msg["content"]
             break
+
+    if MEMORY_ENABLED and use_memory and conversation_memory.memories:
+        memory_text = conversation_memory.format_for_prompt(query=user_query)
+        if memory_text:
+            if system_prompt:
+                system_prompt = f"{system_prompt}\n\n{memory_text}"
+            else:
+                system_prompt = memory_text
+            logger.debug("Added memory context to streaming prompt using semantic search")
 
     full_response = []
 
@@ -695,6 +1241,7 @@ async def generate_response_stream(
                     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
                     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
                 ],
+                system_instruction=system_prompt
             )
 
             chat_history = []
@@ -707,7 +1254,7 @@ async def generate_response_stream(
 
                 if system_prompt:
                     response = model_obj.generate_content(
-                        chat_history, system_instruction=system_prompt, stream=False
+                        chat_history, stream=False
                     )
                 else:
                     response = model_obj.generate_content(chat_history, stream=False)
@@ -724,6 +1271,124 @@ async def generate_response_stream(
             except Exception as e:
                 logger.error(f"Error generating response from Google API: {str(e)}")
                 yield f"Error generating response: {str(e)}"
+        elif chat_provider.lower() == "openrouter":
+            if not chat_api_key or chat_api_key.lower() == "none":
+                raise ValueError("API key not set for OpenRouter provider")
+
+            import time
+
+            formatted_messages = []
+
+            if system_prompt:
+                formatted_messages.append({"role": "system", "content": system_prompt})
+
+            formatted_messages.extend(messages)
+
+            payload = {
+                "model": chat_model,
+                "messages": formatted_messages,
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "stream": False
+            }
+
+            headers = {
+                "Authorization": f"Bearer {chat_api_key}",
+                "Content-Type": "application/json"
+            }
+
+            max_retries = 3
+            retry_delay = 2
+
+            for retry in range(max_retries):
+                try:
+                    logger.info(f"Using non-streaming mode for OpenRouter API and simulating streaming (attempt {retry+1}/{max_retries})")
+
+                    response = requests.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers=headers,
+                        json=payload,
+                        timeout=30
+                    )
+
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('X-RateLimit-Reset', 0)) / 1000 - time.time()
+                        if retry_after <= 0:
+                            retry_after = retry_delay * (2 ** retry)
+
+                        error_msg = f"OpenRouter rate limit hit. Retrying in {retry_after:.1f} seconds. Attempt {retry+1}/{max_retries}"
+                        logger.warning(error_msg)
+                        yield f"Rate limit exceeded. Retrying... ({retry+1}/{max_retries})"
+
+                        if retry < max_retries - 1:
+                            await asyncio.sleep(min(retry_after, 15))
+                            continue
+                        else:
+                            error_data = response.json() if response.text else {}
+                            error_msg = error_data.get('error', {}).get('message', 'Rate limit exceeded')
+                            error_message = f"Rate limit exceeded: {error_msg}. Try again in a few minutes or switch to a different provider."
+                            logger.error(error_message)
+                            yield f"Error: {error_message}"
+                            return
+
+                    if response.status_code != 200:
+                        error_message = f"OpenRouter API error: {response.status_code} - {response.text}"
+                        logger.error(error_message)
+
+                        if retry < max_retries - 1 and response.status_code >= 500:
+                            delay = retry_delay * (2 ** retry)
+                            logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                            yield f"Server error. Retrying... ({retry+1}/{max_retries})"
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            yield f"Error generating response: {error_message}"
+                            return
+
+                    response_data = response.json()
+
+                    if "choices" not in response_data or len(response_data["choices"]) == 0:
+                        error_message = "OpenRouter API returned no choices"
+                        logger.warning(f"{error_message}. Attempt {retry+1}/{max_retries}")
+
+                        if retry < max_retries - 1:
+                            delay = retry_delay * (2 ** retry)
+                            logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                            yield f"No response received. Retrying... ({retry+1}/{max_retries})"
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            logger.error(error_message)
+                            yield f"Error generating response: {error_message}"
+                            return
+
+                    response_text = response_data["choices"][0]["message"]["content"]
+
+                    chunk_size = 20
+                    for i in range(0, len(response_text), chunk_size):
+                        chunk_text = response_text[i:i+chunk_size]
+                        full_response.append(chunk_text)
+                        yield chunk_text
+                        await asyncio.sleep(0.01)
+
+                    break
+
+                except requests.exceptions.RequestException as e:
+                    logger.error(f"Network error when calling OpenRouter API: {str(e)}", exc_info=True)
+
+                    if retry < max_retries - 1:
+                        delay = retry_delay * (2 ** retry)
+                        logger.warning(f"Network error. Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                        yield f"Network error. Retrying... ({retry+1}/{max_retries})"
+                        await asyncio.sleep(delay)
+                    else:
+                        yield f"Error: Network error when calling OpenRouter API: {str(e)}"
+                        return
+
+                except Exception as e:
+                    logger.error(f"Error generating response from OpenRouter API: {str(e)}")
+                    yield f"Error generating response: {str(e)}"
+                    return
         else:
             client = OllamaAsyncClient()
             try:
@@ -758,9 +1423,25 @@ async def generate_response_stream(
         logger.error(f"Error generating streaming response: {str(e)}")
         raise
 
+    complete_response = "".join(full_response)
+
+    chat_id = ""
     if CHAT_LOGS_ENABLED and project_path:
-        complete_response = "".join(full_response)
-        log_chat(user_query, complete_response, project_path)
+        chat_id = log_chat(user_query, complete_response, project_path)
+
+    if MEMORY_ENABLED and add_to_memory:
+        _, _, clean_response = parse_thinking_tokens(complete_response)
+
+        memory_entry = create_memory_entry(user_query, clean_response)
+        if memory_entry:
+            conversation_memory.add_memory(
+                memory_entry,
+                metadata={
+                    "query": user_query,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "chat_id": chat_id
+                }
+            )
 
 
 def generate_description(
@@ -775,11 +1456,11 @@ def generate_description(
 
     Args:
         prompt (str): The prompt to generate a description from.
-        template_name (Optional[str], optional): Name of a prompt template to use. Defaults to None.
-        template_vars (Optional[Dict[str, str]], optional): Variables to format the template with. Defaults to None.
+        template_name (str, optional): Name of a prompt template to use. Defaults to None.
+        template_vars (Dict[str, str], optional): Variables to format the template with. Defaults to None.
         temperature (float, optional): Temperature for response generation. Defaults to 0.3.
-        max_tokens (Optional[int], optional): Maximum tokens to generate. Defaults to None.
-        project_path (Optional[str], optional): Path to the project for chat logging. Defaults to None.
+        max_tokens (int, optional): Maximum tokens to generate. Defaults to None.
+        project_path (str, optional): Path to the project for chat logging. Defaults to None.
 
     Returns:
         str: Generated description text.
@@ -807,13 +1488,145 @@ def generate_description(
 
         prompt = formatted_prompt
 
-    if AI_DESCRIPTION_PROVIDER == "google":
-        response = _generate_description_google(prompt, temperature, max_tokens)
-    else:
-        response = _generate_description_ollama(prompt, temperature, max_tokens)
+    try:
+        if AI_DESCRIPTION_PROVIDER == "google":
+            response = _generate_description_google(prompt, temperature, max_tokens)
+        elif AI_DESCRIPTION_PROVIDER == "openrouter":
+            try:
+                response = _generate_description_openrouter(prompt, temperature, max_tokens)
+            except Exception as e:
+                # Check if it's a rate limit error
+                if "rate limit" in str(e).lower():
+                    logger.warning(f"OpenRouter rate limit hit. Falling back to Ollama: {str(e)}")
+                    # Fall back to Ollama
+                    response = _generate_description_ollama(prompt, temperature, max_tokens)
+                else:
+                    # Re-raise other errors
+                    raise
+        else:
+            response = _generate_description_ollama(prompt, temperature, max_tokens)
+    except Exception as e:
+        # Add more context to the error message
+        error_msg = f"Error generating description with provider '{AI_DESCRIPTION_PROVIDER}': {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise Exception(error_msg)
     if CHAT_LOGS_ENABLED and project_path:
         log_chat(prompt, response, project_path)
     return response
+
+
+@track_performance("openrouter")
+def _generate_description_openrouter(
+    prompt: str,
+    temperature: float = 0.3,
+    max_tokens: Optional[int] = None,
+) -> str:
+    """Generate a description using OpenRouter.
+
+    Args:
+        prompt (str): The prompt text.
+        temperature (float): Temperature. Defaults to 0.3.
+        max_tokens (Optional[int]): Max tokens. Defaults to None.
+
+    Returns:
+        str: Generated description.
+
+    Raises:
+        ValueError: If API key is not set.
+        Exception: If API call fails.
+    """
+    import time
+
+    if not AI_DESCRIPTION_API_KEY or AI_DESCRIPTION_API_KEY.lower() == "none":
+        raise ValueError("AI_DESCRIPTION_API_KEY not set for OpenRouter provider")
+
+    messages = [{"role": "user", "content": prompt}]
+
+    payload = {
+        "model": DESCRIPTION_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+    }
+
+    if max_tokens:
+        payload["max_tokens"] = max_tokens
+
+    headers = {
+        "Authorization": f"Bearer {AI_DESCRIPTION_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    max_retries = 3
+    retry_delay = 2
+
+    for retry in range(max_retries):
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=120
+            )
+
+            if response.status_code == 429:
+                retry_after = int(response.headers.get('X-RateLimit-Reset', 0)) / 1000 - time.time()
+                if retry_after <= 0:
+                    retry_after = retry_delay * (2 ** retry)
+
+                logger.warning(f"OpenRouter rate limit hit. Retrying in {retry_after:.1f} seconds. Attempt {retry+1}/{max_retries}")
+
+                if retry < max_retries - 1:
+                    time.sleep(min(retry_after, 15))
+                    continue
+                else:
+                    error_data = response.json() if response.text else {}
+                    error_msg = error_data.get('error', {}).get('message', 'Rate limit exceeded')
+                    raise Exception(f"Rate limit exceeded: {error_msg}. Try again in a few minutes or switch to a different provider.")
+
+            if response.status_code != 200:
+                error_message = f"OpenRouter API error: {response.status_code} - {response.text}"
+                logger.error(error_message)
+
+                if retry < max_retries - 1 and response.status_code >= 500:
+                    delay = retry_delay * (2 ** retry)
+                    logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(error_message)
+
+            response_data = response.json()
+
+            if "choices" not in response_data or len(response_data["choices"]) == 0:
+                error_message = "OpenRouter API returned no choices"
+                logger.warning(f"{error_message}. Attempt {retry+1}/{max_retries}")
+
+                if retry < max_retries - 1:
+                    delay = retry_delay * (2 ** retry)
+                    logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise Exception(error_message)
+
+            message_content = response_data["choices"][0]["message"]["content"]
+            return message_content
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error when calling OpenRouter API: {str(e)}", exc_info=True)
+
+            if retry < max_retries - 1:
+                delay = retry_delay * (2 ** retry)
+                logger.warning(f"Network error. Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
+                time.sleep(delay)
+            else:
+                raise Exception(f"Network error when calling OpenRouter API: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"OpenRouter API error with model {DESCRIPTION_MODEL}: {str(e)}", exc_info=True)
+            raise Exception(f"OpenRouter API error with model {DESCRIPTION_MODEL}: {str(e)}")
+
+    raise Exception(f"Failed to get response from OpenRouter after {max_retries} attempts")
 
 
 @track_performance("google")
@@ -826,8 +1639,8 @@ def _generate_description_google(
 
     Args:
         prompt (str): The prompt text.
-        temperature (float, optional): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to 0.3.
+        max_tokens (Optional[int]): Max tokens. Defaults to None.
 
     Returns:
         str: Generated description.
@@ -874,8 +1687,8 @@ def _generate_description_ollama(
 
     Args:
         prompt (str): The prompt text.
-        temperature (float, optional): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to 0.3.
+        max_tokens (Optional[int]): Max tokens. Defaults to None.
 
     Returns:
         str: Generated description.
@@ -942,20 +1755,25 @@ def reset_performance_metrics() -> None:
         "provider_stats": {
             "ollama": {"requests": 0, "time": 0.0},
             "google": {"requests": 0, "time": 0.0},
+            "openrouter": {"requests": 0, "time": 0.0},
         },
     }
 
 
-def log_chat(query: str, response: str, project_path: str) -> None:
+def log_chat(query: str, response: str, project_path: str, feedback: str = None) -> str:
     """Log chat interactions to a JSON file.
 
     Args:
         query (str): The user's query.
         response (str): The AI's response.
         project_path (str): The path to the indexed project.
+        feedback (str, optional): User feedback on the response. Defaults to None.
+
+    Returns:
+        str: The ID of the chat entry (timestamp) for later reference.
     """
     if not CHAT_LOGS_ENABLED:
-        return
+        return ""
 
     try:
         logs_dir = Path("chat_logs")
@@ -970,9 +1788,12 @@ def log_chat(query: str, response: str, project_path: str) -> None:
 
         timestamp = datetime.datetime.now().isoformat()
         chat_entry = {
+            "id": timestamp,
             "timestamp": timestamp,
             "query": query,
             "response": response,
+            "feedback": feedback,
+            "feedback_timestamp": datetime.datetime.now().isoformat() if feedback else None
         }
 
         if log_file.exists():
@@ -989,5 +1810,64 @@ def log_chat(query: str, response: str, project_path: str) -> None:
             json.dump(log_data, f, ensure_ascii=False, indent=2)
 
         logger.debug(f"Chat logged to {log_file}")
+        return timestamp
     except Exception as e:
         logger.error(f"Error logging chat: {e}")
+        return ""
+
+
+def add_feedback(chat_id: str, feedback: str, project_path: str) -> bool:
+    """Add feedback to a previously logged chat.
+
+    Args:
+        chat_id (str): The ID of the chat entry (timestamp).
+        feedback (str): User feedback on the response.
+        project_path (str): The path to the indexed project.
+
+    Returns:
+        bool: True if feedback was added successfully, False otherwise.
+    """
+    if not CHAT_LOGS_ENABLED:
+        return False
+
+    try:
+        logs_dir = Path("chat_logs")
+        if not logs_dir.exists():
+            logger.error("Chat logs directory does not exist")
+            return False
+
+        project_name = Path(project_path).name
+        project_logs_dir = logs_dir / project_name
+        if not project_logs_dir.exists():
+            logger.error(f"Project logs directory does not exist: {project_name}")
+            return False
+
+        log_files = list(project_logs_dir.glob("*.json"))
+        if not log_files:
+            logger.error(f"No log files found for project: {project_name}")
+            return False
+
+        for log_file in log_files:
+            try:
+                with open(log_file, "r", encoding="utf-8") as f:
+                    log_data = json.load(f)
+
+                for chat in log_data.get("chats", []):
+                    if chat.get("id") == chat_id or chat.get("timestamp") == chat_id:
+                        chat["feedback"] = feedback
+                        chat["feedback_timestamp"] = datetime.datetime.now().isoformat()
+
+                        with open(log_file, "w", encoding="utf-8") as f:
+                            json.dump(log_data, f, ensure_ascii=False, indent=2)
+
+                        logger.info(f"Added feedback to chat {chat_id} in {log_file}")
+                        return True
+            except Exception as e:
+                logger.error(f"Error processing log file {log_file}: {e}")
+                continue
+
+        logger.warning(f"Chat entry with ID {chat_id} not found in any log file")
+        return False
+    except Exception as e:
+        logger.error(f"Error adding feedback: {e}")
+        return False

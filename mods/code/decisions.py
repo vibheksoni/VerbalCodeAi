@@ -2,23 +2,253 @@
 
 Provides functionality to select relevant files based on queries and descriptions,
 optimize search queries, find the most relevant code snippets, analyze projects,
-and handle AI chat interactions.
+handle AI chat interactions, and determine user intent.
 """
 
+import asyncio
 import json
 import logging
 import os
 import random
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union, AsyncGenerator
+from enum import Enum, auto
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    AsyncGenerator,
+    Set,
+)
 
 import numpy as np
 
-from ..llms import generate_response, generate_embed, generate_response_stream, parse_thinking_tokens
+from ..llms import (
+    generate_response,
+    generate_embed,
+    generate_response_stream,
+    parse_thinking_tokens,
+)
 from .embed import SimilaritySearch
 
 logger = logging.getLogger("VerbalCodeAI.Decisions")
+
+
+class MessageIntent(Enum):
+    """Enum representing different types of user message intents."""
+
+    GREETING = auto()
+    FAREWELL = auto()
+    GRATITUDE = auto()
+    SMALL_TALK = auto()
+    HELP_REQUEST = auto()
+    CODE_QUESTION = auto()
+    FEATURE_REQUEST = auto()
+    FEEDBACK = auto()
+    COMMAND = auto()
+    UNKNOWN = auto()
+
+
+class MessageIntentDetector:
+    """Detects the intent of user messages to optimize response generation.
+
+    This class analyzes user messages to determine their intent, which helps
+    optimize the response generation process by avoiding unnecessary API calls
+    for simple messages like greetings.
+    """
+
+    GREETING_PATTERNS = {
+        r"^(hi|hello|hey|greetings|howdy|hola)(\s|$|!|\.|,)",
+        r"^good\s(morning|afternoon|evening|day)(\s|$|!|\.|,)",
+    }
+
+    FAREWELL_PATTERNS = {
+        r"^(bye|goodbye|see\s+you|farewell|until\s+next\s+time)(\s|$|!|\.|,)",
+        r"^(have\s+a\s+good|have\s+a\s+nice)\s+(day|night|evening|weekend)(\s|$|!|\.|,)",
+    }
+
+    GRATITUDE_PATTERNS = {
+        r"^(thanks|thank\s+you|thx|ty|appreciate\s+it)(\s|$|!|\.|,)",
+    }
+
+    SMALL_TALK_PATTERNS = {
+        r"^how\s+(are\s+you|is\s+it\s+going|are\s+things)(\s|$|\?|!|\.|,)",
+        r"^what('s|\s+is)\s+up(\s|$|\?|!|\.|,)",
+    }
+
+    HELP_PATTERNS = {
+        r"^(help|assist|aid)(\s|$|!|\.|,|\?)",
+        r"^(i\s+need|can\s+you|could\s+you)\s+(help|assist|aid)(\s|$|!|\.|,|\?)",
+    }
+
+    COMMAND_PATTERNS = {
+        r"^(clear|reset|restart|refresh|start\s+over)(\s|$|!|\.|,)",
+        r"^(clear|reset|forget)\s+(memory|memories|context|history)(\s|$|!|\.|,|\?)",
+        r"^(show|list|display)\s+(memory|memories|context|history)(\s|$|!|\.|,|\?)",
+        r"^(memory|memories)\s+(status|info|statistics)(\s|$|!|\.|,|\?)",
+    }
+
+    MEMORY_CLEAR_PATTERNS = {
+        r"^(clear|reset|forget)\s+(memory|memories|context|history)(\s|$|!|\.|,|\?)",
+        r"^(clear|reset|forget)\s+(all|everything)(\s|$|!|\.|,)",
+    }
+
+    MEMORY_SHOW_PATTERNS = {
+        r"^(show|list|display)\s+(memory|memories|context|history)(\s|$|!|\.|,|\?)",
+        r"^(memory|memories)\s+(status|info|statistics)(\s|$|!|\.|,|\?)",
+    }
+
+    FEEDBACK_PATTERNS = {
+        r"^(feedback|rate|review)\s+(response|answer|reply)(\s|$|!|\.|,|\?)",
+        r"^(good|great|excellent|helpful|useful|thanks|thank\s+you)\s+(response|answer|reply)(\s|$|!|\.|,|\?)",
+        r"^(bad|poor|incorrect|wrong|not\s+helpful|useless)\s+(response|answer|reply)(\s|$|!|\.|,|\?)",
+    }
+
+    def __init__(self):
+        """Initialize the MessageIntentDetector."""
+        self.logger = logging.getLogger("VerbalCodeAI.Decisions.MessageIntentDetector")
+
+    def detect_intent(self, message: str) -> MessageIntent:
+        """Detect the intent of a user message.
+
+        Args:
+            message (str): The user's message.
+
+        Returns:
+            MessageIntent: The detected intent.
+        """
+        if not message:
+            return MessageIntent.UNKNOWN
+
+        message_lower = message.lower().strip()
+
+        for pattern in self.GREETING_PATTERNS:
+            if re.search(pattern, message_lower):
+                return MessageIntent.GREETING
+
+        for pattern in self.FAREWELL_PATTERNS:
+            if re.search(pattern, message_lower):
+                return MessageIntent.FAREWELL
+
+        for pattern in self.GRATITUDE_PATTERNS:
+            if re.search(pattern, message_lower):
+                return MessageIntent.GRATITUDE
+
+        for pattern in self.SMALL_TALK_PATTERNS:
+            if re.search(pattern, message_lower):
+                return MessageIntent.SMALL_TALK
+
+        for pattern in self.HELP_PATTERNS:
+            if re.search(pattern, message_lower):
+                return MessageIntent.HELP_REQUEST
+
+        for pattern in self.COMMAND_PATTERNS:
+            if re.search(pattern, message_lower):
+                return MessageIntent.COMMAND
+
+        try:
+            from ..llms import detect_intent
+
+            llm_intent = detect_intent(message)
+
+            intent_mapping = {
+                "GREETING": MessageIntent.GREETING,
+                "FAREWELL": MessageIntent.FAREWELL,
+                "GRATITUDE": MessageIntent.GRATITUDE,
+                "SMALL_TALK": MessageIntent.SMALL_TALK,
+                "SIMPLE_QUESTION": MessageIntent.SMALL_TALK,
+                "CODE_QUESTION": MessageIntent.CODE_QUESTION,
+                "FEATURE_REQUEST": MessageIntent.FEATURE_REQUEST,
+                "HELP_REQUEST": MessageIntent.HELP_REQUEST,
+                "FEEDBACK": MessageIntent.FEEDBACK,
+                "OTHER": MessageIntent.CODE_QUESTION,
+            }
+
+            if llm_intent in intent_mapping:
+                self.logger.info(f"LLM detected intent: {llm_intent}")
+                return intent_mapping[llm_intent]
+
+        except Exception as e:
+            self.logger.error(f"Error using LLM intent detection: {e}")
+
+        return MessageIntent.CODE_QUESTION
+
+    def get_response_for_intent(
+        self, intent: MessageIntent, message: str
+    ) -> Optional[str]:
+        """Get a predefined response for simple intents.
+
+        Args:
+            intent (MessageIntent): The detected intent.
+            message (str): The original message.
+
+        Returns:
+            Optional[str]: A predefined response if available, None otherwise.
+        """
+        from ..llms import conversation_memory
+
+        if intent == MessageIntent.GREETING:
+            return "Hello! I'm your code assistant. How can I help you with your codebase today?"
+
+        elif intent == MessageIntent.FAREWELL:
+            return "Goodbye! Feel free to come back if you have more questions about your code."
+
+        elif intent == MessageIntent.GRATITUDE:
+            return "You're welcome! I'm happy to help with your code questions."
+
+        elif intent == MessageIntent.SMALL_TALK:
+            return "I'm doing well, thanks for asking! I'm ready to help you with your code questions."
+
+        elif intent == MessageIntent.HELP_REQUEST:
+            return "I can help you understand your codebase, answer questions about specific files or functions, explain code behavior, and suggest improvements. What would you like to know?"
+
+        elif intent == MessageIntent.COMMAND:
+            message_lower = message.lower()
+
+            is_memory_clear = any(
+                re.search(pattern, message_lower)
+                for pattern in self.MEMORY_CLEAR_PATTERNS
+            )
+            is_memory_show = any(
+                re.search(pattern, message_lower)
+                for pattern in self.MEMORY_SHOW_PATTERNS
+            )
+            is_feedback = any(
+                re.search(pattern, message_lower) for pattern in self.FEEDBACK_PATTERNS
+            )
+
+            if is_memory_clear:
+                conversation_memory.clear()
+                return "I've cleared my memory of our previous conversation. What would you like to discuss now?"
+
+            elif is_memory_show:
+                if not conversation_memory.memories:
+                    return "No memories stored. Our conversation context is empty."
+
+                memory_count = len(conversation_memory.memories)
+                memory_list = "\n\n".join(
+                    [
+                        f"{i+1}. {m['content']}"
+                        for i, m in enumerate(conversation_memory.memories[-5:])
+                    ]
+                )
+
+                return f"I have {memory_count} memories from our conversation. Here are the most recent ones:\n\n{memory_list}"
+
+            elif is_feedback:
+                return "Thank you for your feedback! This helps me improve my responses. Is there anything specific you'd like me to do differently?"
+
+            elif (
+                "clear" in message_lower
+                or "reset" in message_lower
+                or "restart" in message_lower
+            ):
+                return "To clear the conversation history, you can use the main menu options or type 'clear memory'. Is there something specific you'd like to reset?"
+
+        return None
 
 
 @dataclass
@@ -399,7 +629,7 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
         """Initialize the FileSelector."""
         self._response_pattern = re.compile(r"<files>\s*(.*?)\s*</files>", re.DOTALL)
         self.query_optimizer = QueryOptimizer()
-        
+
         self.performance_mode = os.getenv("PERFORMANCE_MODE", "MEDIUM").upper()
         self.logger = logging.getLogger("VerbalCodeAI.Decisions.FileSelector")
 
@@ -929,6 +1159,8 @@ class ChatHandler:
         self.file_selector = file_selector
         self.project_info = project_info or {}
         self.chat_history = []
+        self.intent_detector = MessageIntentDetector()
+        self.last_chat_id = ""
         self.logger = logging.getLogger("VerbalCodeAI.Decisions.ChatHandler")
 
     def set_project_info(self, project_info: Dict[str, Any]) -> None:
@@ -948,6 +1180,34 @@ class ChatHandler:
         """
         self.chat_history.append({"role": role, "content": content})
 
+    def add_feedback(self, feedback: str) -> bool:
+        """Add feedback for the last AI response.
+
+        Args:
+            feedback (str): The feedback to add.
+
+        Returns:
+            bool: True if feedback was added successfully, False otherwise.
+        """
+        from ..llms import add_feedback
+
+        if not self.last_chat_id:
+            self.logger.warning("No chat ID available to add feedback")
+            return False
+
+        project_path = self.indexer.root_path if self.indexer else ""
+        if not project_path:
+            self.logger.warning("No project path available to add feedback")
+            return False
+
+        success = add_feedback(self.last_chat_id, feedback, project_path)
+        if success:
+            self.logger.info(f"Added feedback for chat {self.last_chat_id}: {feedback[:50]}...")
+        else:
+            self.logger.error(f"Failed to add feedback for chat {self.last_chat_id}")
+
+        return success
+
     def get_chat_history(self, max_messages: int = 5) -> List[Dict[str, str]]:
         """Get the most recent chat history.
 
@@ -962,6 +1222,21 @@ class ChatHandler:
     def clear_history(self) -> None:
         """Clear the chat history."""
         self.chat_history = []
+
+    async def _string_to_async_generator(self, text: str) -> AsyncGenerator[str, None]:
+        """Convert a string to an async generator for streaming.
+
+        Args:
+            text (str): The text to convert to a streaming response.
+
+        Yields:
+            str: Chunks of the text.
+        """
+        chunk_size = 20
+        for i in range(0, len(text), chunk_size):
+            chunk = text[i : i + chunk_size]
+            yield chunk
+            await asyncio.sleep(0.01)
 
     def process_query(
         self, query: str, max_chat_mode: bool = False, streaming: bool = False
@@ -987,6 +1262,85 @@ class ChatHandler:
         self.logger.info(f"Processing query: {query}")
         self.add_to_history("user", query)
 
+        intent = self.intent_detector.detect_intent(query)
+        self.logger.info(f"Detected intent: {intent.name}")
+
+        predefined_response = self.intent_detector.get_response_for_intent(intent, query)
+        if predefined_response:
+            self.logger.info(f"Using predefined response for intent: {intent.name}")
+            self.add_to_history("assistant", predefined_response)
+
+            if streaming:
+                self.logger.info("Converting simple response to streaming format")
+                return self._string_to_async_generator(predefined_response), []
+            else:
+                return predefined_response, []
+
+        if intent in [
+            MessageIntent.GREETING,
+            MessageIntent.FAREWELL,
+            MessageIntent.GRATITUDE,
+            MessageIntent.SMALL_TALK,
+        ]:
+            self.logger.info(f"Simple query detected ({intent.name}), skipping file selection")
+
+            project_info_str = ""
+            if self.project_info:
+                if intent == MessageIntent.CODE_QUESTION:
+                    self.logger.info("Providing detailed project info for code question")
+                    project_info_str = "Here's information about this codebase:\n\n"
+                    for key, value in self.project_info.items():
+                        if isinstance(value, list):
+                            value_str = ", ".join(value)
+                            project_info_str += f"{key.capitalize()}: {value_str}\n"
+                        else:
+                            project_info_str += f"{key.capitalize()}: {value}\n"
+                else:
+                    self.logger.info("Providing minimal project context")
+                    if "name" in self.project_info:
+                        project_info_str = f"Project: {self.project_info['name']}\n"
+
+                if project_info_str:
+                    query = f"{query}\n\n{project_info_str}"
+
+            project_path = self.indexer.root_path if self.indexer else ""
+
+            if streaming:
+                self.logger.info("Using streaming response generation for simple query")
+                response_generator = generate_response_stream(
+                    messages=[{"role": "user", "content": query}],
+                    project_path=project_path,
+                    use_memory=True,
+                    add_to_memory=True,
+                )
+                return response_generator, []
+            else:
+                simple_response = generate_response(
+                    messages=[{"role": "user", "content": query}],
+                    project_path=project_path,
+                    parse_thinking=True,
+                    use_memory=True,
+                    add_to_memory=True,
+                )
+
+                from ..llms import conversation_memory
+
+                for memory in conversation_memory.memories:
+                    if memory.get("metadata", {}).get("query") == query:
+                        chat_id = memory.get("metadata", {}).get("chat_id")
+                        if chat_id:
+                            self.last_chat_id = chat_id
+                            self.logger.debug(f"Stored chat ID: {chat_id}")
+                            break
+
+                if isinstance(simple_response, tuple):
+                    _, _, clean_response = simple_response
+                    self.add_to_history("assistant", clean_response)
+                    return clean_response, []
+                else:
+                    self.add_to_history("assistant", simple_response)
+                    return simple_response, []
+
         file_infos = []
         try:
             metadata_dir = os.path.join(self.indexer.index_dir, "metadata")
@@ -997,15 +1351,11 @@ class ChatHandler:
                     [],
                 )
 
-            metadata_files = [
-                f for f in os.listdir(metadata_dir) if f.endswith(".json")
-            ]
+            metadata_files = [f for f in os.listdir(metadata_dir) if f.endswith(".json")]
 
             for file in metadata_files:
                 try:
-                    with open(
-                        os.path.join(metadata_dir, file), "r", encoding="utf-8"
-                    ) as f:
+                    with open(os.path.join(metadata_dir, file), "r", encoding="utf-8") as f:
                         metadata = json.load(f)
 
                     file_info = FileInfo(
@@ -1042,6 +1392,70 @@ class ChatHandler:
 
         relevant_files = self.file_selector.pick_files(query, file_infos)
 
+        project_path = self.indexer.root_path if self.indexer else ""
+
+        if max_chat_mode and relevant_files:
+            self.logger.info("Using Max Chat Mode with specialized template")
+
+            code_files_content = ""
+            for file_path in relevant_files:
+                for file_info in file_infos:
+                    if file_info.path == file_path:
+                        if file_info.chunks and len(file_info.chunks) > 0:
+                            file_content = file_info.chunks[0]["text"]
+                            code_files_content += f"FILE: {file_info.path}\n"
+                            code_files_content += f"DESCRIPTION: {file_info.description}\n"
+                            code_files_content += f"CONTENT:\n{file_content}\n\n"
+
+            template_vars = {"code_files": code_files_content, "query": query}
+
+            if streaming:
+                self.logger.info("Using streaming response generation for Max Chat Mode")
+                system_prompt = ""
+                if self.project_info:
+                    system_prompt = (
+                        "You are assisting with a codebase. Here's some information about the project:\n\n"
+                    )
+                    for key, value in self.project_info.items():
+                        if isinstance(value, list):
+                            value_str = ", ".join(value)
+                            system_prompt += f"{key.capitalize()}: {value_str}\n"
+                        else:
+                            system_prompt += f"{key.capitalize()}: {value}\n"
+
+                response_generator = generate_response_stream(
+                    messages=[{"role": "user", "content": "Analyzing code files for your query..."}],
+                    system_prompt=system_prompt,
+                    project_path=project_path,
+                    template_name="max_mode_analysis",
+                    template_vars=template_vars,
+                )
+                return response_generator, relevant_files
+            else:
+                full_response, thinking_tokens, clean_response = generate_response(
+                    messages=[],
+                    project_path=project_path,
+                    parse_thinking=True,
+                    template_name="max_mode_analysis",
+                    template_vars=template_vars,
+                )
+
+                if thinking_tokens.thinking_found:
+                    self.logger.info(f"AI thinking tokens: {thinking_tokens.total_tokens}")
+
+                from ..llms import conversation_memory
+
+                for memory in conversation_memory.memories:
+                    if memory.get("metadata", {}).get("query") == query:
+                        chat_id = memory.get("metadata", {}).get("chat_id")
+                        if chat_id:
+                            self.last_chat_id = chat_id
+                            self.logger.debug(f"Stored chat ID: {chat_id}")
+                            break
+
+                self.add_to_history("assistant", full_response)
+                return clean_response, relevant_files
+
         messages = []
 
         if self.project_info:
@@ -1069,8 +1483,10 @@ class ChatHandler:
 
                         if file_info.chunks and len(file_info.chunks) > 0:
                             chunk_text = file_info.chunks[0]["text"]
+
                             if not max_chat_mode and len(chunk_text) > 2000:
                                 chunk_text = chunk_text[:2000] + "..."
+
                             context += f"Content:\n{chunk_text}\n\n"
                         break
 
@@ -1080,13 +1496,9 @@ class ChatHandler:
 
         self.logger.info("Generating AI response...")
 
-        project_path = self.indexer.root_path if self.indexer else ""
-
         if streaming:
             self.logger.info("Using streaming response generation")
-            response_generator = generate_response_stream(
-                messages, project_path=project_path
-            )
+            response_generator = generate_response_stream(messages, project_path=project_path)
             return response_generator, relevant_files
         else:
             full_response, thinking_tokens, clean_response = generate_response(
@@ -1095,6 +1507,16 @@ class ChatHandler:
 
             if thinking_tokens.thinking_found:
                 self.logger.info(f"AI thinking tokens: {thinking_tokens.total_tokens}")
+
+            from ..llms import conversation_memory
+
+            for memory in conversation_memory.memories:
+                if memory.get("metadata", {}).get("query") == query:
+                    chat_id = memory.get("metadata", {}).get("chat_id")
+                    if chat_id:
+                        self.last_chat_id = chat_id
+                        self.logger.debug(f"Stored chat ID: {chat_id}")
+                        break
 
             self.add_to_history("assistant", full_response)
 
