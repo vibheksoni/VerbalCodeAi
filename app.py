@@ -10,18 +10,20 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import colorama
 from colorama import Fore, Style
 from dotenv import load_dotenv
 
 try:
-    from mods.banners import ANIMATION_FRAMES, display_animated_banner
+    from mods.banners import display_animated_banner
+    from mods.code.agent_mode import AgentMode
     from mods.code.decisions import ChatHandler, FileSelector, ProjectAnalyzer
     from mods.code.indexer import FileIndexer
     from mods.terminal_ui import StreamingResponseHandler, display_response
@@ -129,6 +131,7 @@ class VerbalCodeAI:
         self.recent_projects: List[Dict[str, str]] = self._load_recent_projects()
         self.index_outdated: bool = False
         self.chat_history: List[Dict[str, str]] = []
+        self.agent_mode_instance: Optional[AgentMode] = None
 
         self.enable_markdown_rendering: bool = self._get_env_bool("ENABLE_MARKDOWN_RENDERING", True)
         self.show_thinking_blocks: bool = self._get_env_bool("SHOW_THINKING_BLOCKS", False)
@@ -144,7 +147,7 @@ class VerbalCodeAI:
         Returns:
             bool: The boolean value.
         """
-        value = os.getenv(key, str(default)).upper()
+        value: str = os.getenv(key, str(default)).upper()
         return value in ("TRUE", "YES", "1", "Y", "T")
 
     def _load_last_directory(self) -> str:
@@ -156,7 +159,7 @@ class VerbalCodeAI:
         try:
             if os.path.exists(self.settings_path):
                 with open(self.settings_path, "r") as f:
-                    settings = json.load(f)
+                    settings: Dict[str, Any] = json.load(f)
                     return settings.get("last_directory", "")
             return ""
         except Exception as e:
@@ -170,7 +173,7 @@ class VerbalCodeAI:
             directory (str): The directory to save.
         """
         try:
-            settings = {}
+            settings: Dict[str, Any] = {}
             if os.path.exists(self.settings_path):
                 with open(self.settings_path, "r") as f:
                     settings = json.load(f)
@@ -191,7 +194,7 @@ class VerbalCodeAI:
         try:
             if os.path.exists(self.settings_path):
                 with open(self.settings_path, "r") as f:
-                    settings = json.load(f)
+                    settings: Dict[str, Any] = json.load(f)
                     return settings.get("recent_projects", [])
             return []
         except Exception as e:
@@ -205,7 +208,7 @@ class VerbalCodeAI:
             directory (str): The directory to add.
         """
         try:
-            project_entry = {
+            project_entry: Dict[str, str] = {
                 "path": directory,
                 "name": os.path.basename(directory),
                 "timestamp": datetime.now().isoformat(),
@@ -215,7 +218,7 @@ class VerbalCodeAI:
             self.recent_projects.insert(0, project_entry)
             self.recent_projects = self.recent_projects[:10]
 
-            settings = {}
+            settings: Dict[str, Any] = {}
             if os.path.exists(self.settings_path):
                 with open(self.settings_path, "r") as f:
                     settings = json.load(f)
@@ -249,37 +252,38 @@ class VerbalCodeAI:
         print(Fore.GREEN + "1. " + Style.BRIGHT + "Index Code" + Style.RESET_ALL)
         print(Fore.GREEN + "2. " + Style.BRIGHT + "Chat with AI" + Style.RESET_ALL)
         print(Fore.GREEN + "3. " + Style.BRIGHT + "Max Chat Mode (Token Intensive)" + Style.RESET_ALL)
-        print(Fore.GREEN + "4. " + Style.BRIGHT + "Force Reindex" + Style.RESET_ALL)
-        print(Fore.GREEN + "5. " + Style.BRIGHT + "View Indexed Files" + Style.RESET_ALL)
-        print(Fore.GREEN + "6. " + Style.BRIGHT + "View Project Info" + Style.RESET_ALL)
-        print(Fore.GREEN + "7. " + Style.BRIGHT + "Recent Projects" + Style.RESET_ALL)
+        print(Fore.GREEN + "4. " + Style.BRIGHT + "Agent Mode" + Style.RESET_ALL)
+        print(Fore.GREEN + "5. " + Style.BRIGHT + "Force Reindex" + Style.RESET_ALL)
+        print(Fore.GREEN + "6. " + Style.BRIGHT + "View Indexed Files" + Style.RESET_ALL)
+        print(Fore.GREEN + "7. " + Style.BRIGHT + "View Project Info" + Style.RESET_ALL)
+        print(Fore.GREEN + "8. " + Style.BRIGHT + "Recent Projects" + Style.RESET_ALL)
 
         print(Fore.CYAN + "-" * 50 + Style.RESET_ALL)
         print(Fore.CYAN + Style.BRIGHT + "Settings" + Style.RESET_ALL)
 
-        markdown_status = (
+        markdown_status: str = (
             f"{Fore.GREEN}Enabled{Style.RESET_ALL}"
             if self.enable_markdown_rendering
             else f"{Fore.RED}Disabled{Style.RESET_ALL}"
         )
-        print(f"{Fore.GREEN}8. {Style.BRIGHT}Toggle Markdown Rendering{Style.RESET_ALL} [{markdown_status}]")
+        print(f"{Fore.GREEN}9. {Style.BRIGHT}Toggle Markdown Rendering{Style.RESET_ALL} [{markdown_status}]")
 
-        thinking_status = (
+        thinking_status: str = (
             f"{Fore.GREEN}Enabled{Style.RESET_ALL}"
             if self.show_thinking_blocks
             else f"{Fore.RED}Disabled{Style.RESET_ALL}"
         )
-        print(f"{Fore.GREEN}9. {Style.BRIGHT}Toggle Thinking Blocks{Style.RESET_ALL} [{thinking_status}]")
+        print(f"{Fore.GREEN}10. {Style.BRIGHT}Toggle Thinking Blocks{Style.RESET_ALL} [{thinking_status}]")
 
-        streaming_status = (
+        streaming_status: str = (
             f"{Fore.GREEN}Enabled{Style.RESET_ALL}"
             if self.enable_streaming_mode
             else f"{Fore.RED}Disabled{Style.RESET_ALL}"
         )
-        print(f"{Fore.GREEN}10. {Style.BRIGHT}Toggle Streaming Mode{Style.RESET_ALL} [{streaming_status}]")
+        print(f"{Fore.GREEN}11. {Style.BRIGHT}Toggle Streaming Mode{Style.RESET_ALL} [{streaming_status}]")
 
-        print(f"{Fore.GREEN}11. {Style.BRIGHT}Clear Screen{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}12. {Style.BRIGHT}Exit{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}12. {Style.BRIGHT}Clear Screen{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}13. {Style.BRIGHT}Exit{Style.RESET_ALL}")
 
         print(Fore.CYAN + "=" * 50 + Style.RESET_ALL)
 
@@ -299,14 +303,14 @@ class VerbalCodeAI:
         print(Fore.CYAN + "=" * 50 + Style.RESET_ALL)
 
         if self.indexer and (self.index_outdated or force_reindex):
-            directory = self.indexer.root_path
+            directory: str = self.indexer.root_path
             print(f"{Fore.YELLOW}Using current directory: {Fore.CYAN}{directory}{Style.RESET_ALL}")
         else:
-            default_dir = self.last_directory if self.last_directory else os.getcwd()
+            default_dir: str = self.last_directory if self.last_directory else os.getcwd()
             print(
                 f"{Fore.YELLOW}Enter directory path {Fore.CYAN}(default: {default_dir}){Fore.YELLOW}:{Style.RESET_ALL}"
             )
-            directory = input(f"{Fore.GREEN}> {Style.RESET_ALL}").strip()
+            directory: str = input(f"{Fore.GREEN}> {Style.RESET_ALL}").strip()
 
             if not directory:
                 directory = default_dir
@@ -321,25 +325,25 @@ class VerbalCodeAI:
         try:
             if not self.indexer or self.indexer.root_path != directory:
                 self.logger.info(f"Creating indexer for directory: {directory}")
-                self.indexer = FileIndexer(directory)
+                self.indexer: FileIndexer = FileIndexer(directory)
 
-                self.project_analyzer = ProjectAnalyzer(self.indexer)
-                self.chat_handler = ChatHandler(self.indexer, self.file_selector)
+                self.project_analyzer: ProjectAnalyzer = ProjectAnalyzer(self.indexer)
+                self.chat_handler: ChatHandler = ChatHandler(self.indexer, self.file_selector)
             else:
                 self.logger.info(f"Using existing indexer for directory: {directory}")
 
-            index_status = self.indexer.is_index_complete()
-            self.index_outdated = not index_status.get("complete", False)
+            index_status: Dict[str, Any] = self.indexer.is_index_complete()
+            self.index_outdated: bool = not index_status.get("complete", False)
 
             self.logger.info("Starting indexing process")
             print(f"{Fore.CYAN}Starting indexing process...{Style.RESET_ALL}")
 
-            outdated_files = []
-            indexed_files = []
+            outdated_files: List[str] = []
+            indexed_files: List[str] = []
 
-            indexed_count = [0]
-            start_time = time.time()
-            total_files = 0
+            indexed_count: List[int] = [0]
+            start_time: float = time.time()
+            total_files: int = 0
 
             def progress_callback() -> bool:
                 """Callback function to report indexing progress.
@@ -348,22 +352,23 @@ class VerbalCodeAI:
                     bool: Always returns False.
                 """
                 indexed_count[0] += 1
-                elapsed = time.time() - start_time
-                files_per_second = indexed_count[0] / elapsed if elapsed > 0 else 0
+                elapsed: float = time.time() - start_time
+                files_per_second: float = indexed_count[0] / elapsed if elapsed > 0 else 0
 
                 if indexed_count[0] % 5 == 0 or indexed_count[0] == total_files:
-                    percent = int((indexed_count[0] / total_files) * 100) if total_files > 0 else 0
-                    eta = ((total_files - indexed_count[0]) / files_per_second) if files_per_second > 0 else 0
-                    eta_str = f"{int(eta / 60)}m {int(eta % 60)}s" if eta > 0 else "0s"
+                    percent: int = int((indexed_count[0] / total_files) * 100) if total_files > 0 else 0
+                    eta: float = ((total_files - indexed_count[0]) / files_per_second) if files_per_second > 0 else 0
+                    eta_str: str = f"{int(eta / 60)}m {int(eta % 60)}s" if eta > 0 else "0s"
 
+                    terminal_width: int
                     terminal_width, _ = get_terminal_size()
-                    bar_width = min(50, terminal_width - 30 if terminal_width > 30 else terminal_width)
+                    bar_width: int = min(50, terminal_width - 30 if terminal_width > 30 else terminal_width)
 
-                    filled_width = 0
+                    filled_width: int = 0
                     if total_files > 0:
                         filled_width = int(bar_width * indexed_count[0] / total_files)
 
-                    bar = f"{Fore.GREEN}{'█' * filled_width}{Fore.WHITE}{'░' * (bar_width - filled_width)}"
+                    bar: str = f"{Fore.GREEN}{'█' * filled_width}{Fore.WHITE}{'░' * (bar_width - filled_width)}"
 
                     sys.stdout.write("\r" + " " * terminal_width)
 
@@ -382,16 +387,15 @@ class VerbalCodeAI:
                 return False
 
             spinner = create_spinner()
-            import threading
 
-            stop_spinner_flag = [False]
+            stop_spinner_flag: List[bool] = [False]
 
             def spin_fn():
                 while not stop_spinner_flag[0]:
                     spinner()
                     time.sleep(0.1)
 
-            spinner_thread = threading.Thread(target=spin_fn)
+            spinner_thread: threading.Thread = threading.Thread(target=spin_fn)
             spinner_thread.daemon = True
 
             if force_reindex:
@@ -403,7 +407,7 @@ class VerbalCodeAI:
                 spinner_thread.start()
 
                 try:
-                    all_files = self.indexer._get_all_indexable_files()
+                    all_files: List[str] = self.indexer._get_all_indexable_files()
                     total_files = len(all_files)
                     self.logger.info(f"[STAT] Estimated {total_files} files to reindex")
                 except Exception as e:
@@ -489,14 +493,14 @@ class VerbalCodeAI:
                 f"\n{Fore.GREEN}{Style.BRIGHT}Indexing complete! {Style.NORMAL}Successfully indexed {Style.BRIGHT}{len(indexed_files)}{Style.NORMAL} files.{Style.RESET_ALL}"
             )
 
-            project_info_path = os.path.join(self.indexer.index_dir, "project_info.json")
-            update_project_info = True
+            project_info_path: str = os.path.join(self.indexer.index_dir, "project_info.json")
+            update_project_info: bool = True
             if len(indexed_files) > 0:
                 if os.path.exists(project_info_path):
                     print(
                         f"\n{Fore.YELLOW}Project information already exists. Would you like to update it? (y/n){Style.RESET_ALL}"
                     )
-                    choice = input(f"{Fore.GREEN}> {Style.RESET_ALL}").strip().lower()
+                    choice: str = input(f"{Fore.GREEN}> {Style.RESET_ALL}").strip().lower()
                     update_project_info = choice == "y" or choice == "yes"
 
                 if update_project_info:
@@ -512,6 +516,48 @@ class VerbalCodeAI:
             self.logger.error(f"Error during indexing: {e}", exc_info=True)
             print(f"{Fore.RED}{Style.BRIGHT}Error during indexing: {e}{Style.RESET_ALL}")
 
+    async def agent_mode(self) -> None:
+        """Run the AI agent mode for interactive codebase exploration."""
+        if not self.indexer:
+            print(f"\n{Fore.RED}Error: No code has been indexed yet. Please index a directory first.{Style.RESET_ALL}")
+            return
+
+        if not self.agent_mode_instance:
+            self.agent_mode_instance: AgentMode = AgentMode(self.indexer)
+
+        print("\n" + Fore.CYAN + "=" * 50 + Style.RESET_ALL)
+        print(Fore.CYAN + Style.BRIGHT + "Agent Mode" + Style.RESET_ALL)
+        print(Fore.CYAN + "=" * 50 + Style.RESET_ALL)
+        print(f"{Fore.YELLOW}In Agent Mode, the AI can use tools to explore and understand your codebase.")
+        print(f"{Fore.YELLOW}Available tools: embed_search, grep, read_file, directory_tree, find_functions, find_classes,")
+        print(f"{Fore.YELLOW}               git_history, search_imports, find_usage, code_analysis, explain_code,")
+        print(f"{Fore.YELLOW}               file_stats, get_project_description, ask_buddy")
+        print(
+            f"{Fore.YELLOW}Type your questions about the codebase. Type '{Fore.RED}exit{Fore.YELLOW}' to return to the main menu.{Style.RESET_ALL}"
+        )
+
+        while True:
+            print(
+                f"\n{Fore.GREEN}Your question (or '{Fore.RED}exit{Fore.GREEN}' to return to menu):{Style.RESET_ALL}"
+            )
+            user_input: str = input(f"{Fore.CYAN}> {Style.RESET_ALL}").strip()
+
+            if user_input.lower() == "exit":
+                break
+
+            if not user_input:
+                continue
+
+            try:
+                print(f"\n{Fore.YELLOW}Processing your question with Agent Mode...{Style.RESET_ALL}")
+                self.logger.info(f"[STAT] Processing question in Agent Mode: {user_input[:50]}...")
+
+                await self.agent_mode_instance.process_query(user_input)
+
+            except Exception as e:
+                self.logger.error(f"Error in Agent Mode: {e}", exc_info=True)
+                print(f"\n{Fore.RED}Error in Agent Mode: {e}{Style.RESET_ALL}")
+
     def chat_with_ai(self, max_chat_mode: bool = False) -> None:
         """Chat with the AI about code.
 
@@ -523,10 +569,10 @@ class VerbalCodeAI:
             return
 
         if not self.chat_handler:
-            self.chat_handler = ChatHandler(self.indexer, self.file_selector, self.project_info)
+            self.chat_handler: ChatHandler = ChatHandler(self.indexer, self.file_selector, self.project_info)
 
         if not self.project_analyzer:
-            self.project_analyzer = ProjectAnalyzer(self.indexer)
+            self.project_analyzer: ProjectAnalyzer = ProjectAnalyzer(self.indexer)
 
         if not self.project_info:
             print(f"\n{Fore.YELLOW}Loading project information before starting chat...{Style.RESET_ALL}")
@@ -555,7 +601,7 @@ class VerbalCodeAI:
             print(
                 f"\n{Fore.GREEN}Your question (or '{Fore.RED}exit{Fore.GREEN}' to return to menu):{Style.RESET_ALL}"
             )
-            user_input = input(f"{Fore.CYAN}> {Style.RESET_ALL}").strip()
+            user_input: str = input(f"{Fore.CYAN}> {Style.RESET_ALL}").strip()
 
             if user_input.lower() == "exit":
                 break
@@ -567,6 +613,8 @@ class VerbalCodeAI:
                 print(f"\n{Fore.YELLOW}Processing your question...{Style.RESET_ALL}")
                 self.logger.info(f"[STAT] Processing question: {user_input[:50]}...")
 
+                response: Union[str, Any]
+                relevant_files: List[str]
                 response, relevant_files = self.chat_handler.process_query(
                     user_input,
                     max_chat_mode=max_chat_mode,
@@ -575,13 +623,13 @@ class VerbalCodeAI:
 
                 if relevant_files:
                     print(f"\n{Fore.CYAN}{Style.BRIGHT}Relevant Files:{Style.RESET_ALL}")
-                    display_count = min(5, len(relevant_files))
+                    display_count: int = min(5, len(relevant_files))
                     for i, file_path in enumerate(relevant_files[:display_count], 1):
-                        file_name = os.path.basename(file_path)
+                        file_name: str = os.path.basename(file_path)
                         print(f"{Fore.GREEN}{i}. {Fore.WHITE}{file_name} {Fore.CYAN}({file_path}){Style.RESET_ALL}")
 
                     if len(relevant_files) > 5:
-                        remaining = len(relevant_files) - 5
+                        remaining: int = len(relevant_files) - 5
                         print(f"{Fore.YELLOW}+ {remaining} more file{'s' if remaining > 1 else ''}{Style.RESET_ALL}")
 
                     if max_chat_mode:
@@ -593,6 +641,7 @@ class VerbalCodeAI:
                         f"{Fore.YELLOW}No relevant files found. Generating response based on general knowledge.{Style.RESET_ALL}"
                     )
 
+                terminal_width: int
                 terminal_width, _ = get_terminal_size()
                 print(f"\n{Fore.CYAN}{Style.BRIGHT}AI Response:{Style.RESET_ALL}")
                 print(Fore.CYAN + "-" * min(terminal_width, 80) + Style.RESET_ALL)
@@ -600,13 +649,13 @@ class VerbalCodeAI:
                 if self.enable_streaming_mode:
                     self.logger.info("[STAT] Processing streaming AI response")
 
-                    handler = StreamingResponseHandler(
+                    handler: StreamingResponseHandler = StreamingResponseHandler(
                         enable_markdown_rendering=self.enable_markdown_rendering,
                         show_thinking_blocks=self.show_thinking_blocks,
                         logger=self.logger,
                     )
 
-                    def on_complete(complete_response):
+                    def on_complete(complete_response: str):
                         self.chat_handler.add_to_history("assistant", complete_response)
 
                     try:
@@ -646,9 +695,9 @@ class VerbalCodeAI:
         try:
             self.logger.info("[STAT] Viewing indexed files information")
 
-            index_status = self.indexer.is_index_complete()
-            status_str = "Complete" if index_status["complete"] else "Incomplete"
-            status_color = Fore.GREEN if index_status["complete"] else Fore.YELLOW
+            index_status: Dict[str, Any] = self.indexer.is_index_complete()
+            status_str: str = "Complete" if index_status["complete"] else "Incomplete"
+            status_color: str = Fore.GREEN if index_status["complete"] else Fore.YELLOW
             print(f"{Fore.CYAN}Index Status: {status_color}{Style.BRIGHT}{status_str}{Style.RESET_ALL}")
 
             if not index_status["complete"] and "reason" in index_status:
@@ -1054,24 +1103,25 @@ class VerbalCodeAI:
                 self.index_outdated = not index_status.get('complete', False)
 
             self.display_menu()
-            choice = input(f"{Fore.YELLOW}Enter your choice (1-12): {Style.RESET_ALL}").strip()
+            choice = input(f"{Fore.YELLOW}Enter your choice (1-13): {Style.RESET_ALL}").strip()
 
             actions = {
                 "1": lambda: self.index_directory(),
                 "2": lambda: self.chat_with_ai(),
                 "3": lambda: self.chat_with_ai(max_chat_mode=True),
-                "4": lambda: self.index_directory(force_reindex=True),
-                "5": lambda: self.view_indexed_files(),
-                "6": lambda: self.view_project_info(),
-                "7": lambda: self.view_recent_projects(),
-                "8": lambda: self.toggle_markdown_rendering(),
-                "9": lambda: self.toggle_thinking_blocks(),
-                "10": lambda: self.toggle_streaming_mode(),
-                "11": lambda: clear_screen(),
+                "4": lambda: asyncio.run(self.agent_mode()),
+                "5": lambda: self.index_directory(force_reindex=True),
+                "6": lambda: self.view_indexed_files(),
+                "7": lambda: self.view_project_info(),
+                "8": lambda: self.view_recent_projects(),
+                "9": lambda: self.toggle_markdown_rendering(),
+                "10": lambda: self.toggle_thinking_blocks(),
+                "11": lambda: self.toggle_streaming_mode(),
+                "12": lambda: clear_screen(),
             }
-            
-            if choice in actions or choice == "12":
-                if choice == "12":
+
+            if choice in actions or choice == "13":
+                if choice == "13":
                     clear_screen()
                     print(f"\n{Fore.GREEN}Exiting VerbalCodeAI. Goodbye!{Style.RESET_ALL}")
                     break
@@ -1079,7 +1129,7 @@ class VerbalCodeAI:
                     clear_screen()
                     actions[choice]()
             else:
-                print(f"\n{Fore.RED}Invalid choice. Please enter a number between 1 and 12.{Style.RESET_ALL}")
+                print(f"\n{Fore.RED}Invalid choice. Please enter a number between 1 and 13.{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     try:

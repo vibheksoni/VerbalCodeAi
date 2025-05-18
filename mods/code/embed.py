@@ -442,18 +442,44 @@ class SimilaritySearch:
     Uses optimized vector search algorithms with caching and performance enhancements.
     """
 
-    def __init__(self, embeddings_dir: str = "embeddings", cache_size: int = 10):
+    def __init__(self, embeddings_dir: str = "embeddings", cache_size: int = None):
         """Initialize SimilaritySearch with embeddings directory.
 
         Args:
             embeddings_dir (str): Directory containing the embeddings.
-            cache_size (int): Number of recent queries to cache.
+            cache_size (int): Number of recent queries to cache. If None, uses EMBEDDING_CACHE_SIZE from .env.
         """
         self.embeddings_dir: str = embeddings_dir
         self.embeddings: Dict[str, np.ndarray] = {}
         self.chunks: Dict[str, List[Dict[str, Any]]] = {}
         self.normalized_embeddings: Dict[str, np.ndarray] = {}
+
+        from os import environ
+
+        if cache_size is None:
+            try:
+                cache_size = int(environ.get("EMBEDDING_CACHE_SIZE", "100"))
+            except (ValueError, TypeError):
+                cache_size = 100
+                logger.warning(
+                    f"Invalid EMBEDDING_CACHE_SIZE in .env, using default: {cache_size}"
+                )
+
         self.cache_size: int = cache_size
+        logger.info(f"Initializing SimilaritySearch with cache size: {self.cache_size}")
+
+        try:
+            self.default_threshold = float(
+                environ.get("EMBEDDING_SIMILARITY_THRESHOLD", "0.15")
+            )
+        except (ValueError, TypeError):
+            self.default_threshold = 0.15
+            logger.warning(
+                f"Invalid EMBEDDING_SIMILARITY_THRESHOLD in .env, using default: {self.default_threshold}"
+            )
+
+        logger.info(f"Using default similarity threshold: {self.default_threshold}")
+
         self.query_cache: Dict[str, List[Dict[str, Any]]] = {}
         self.load_embeddings()
         self.cache_hits: int = 0
@@ -467,78 +493,140 @@ class SimilaritySearch:
             return
 
         for file in os.listdir(self.embeddings_dir):
-            if file.endswith('.npz'):
+            if file.endswith(".npz"):
                 base_name: str = os.path.splitext(file)[0]
                 embed_path: str = os.path.join(self.embeddings_dir, file)
                 meta_path: str = os.path.join(self.embeddings_dir, f"{base_name}.json")
 
                 if os.path.exists(meta_path):
-                    self.embeddings[base_name] = np.load(embed_path)['embeddings']
-                    norms = np.linalg.norm(self.embeddings[base_name], axis=1, keepdims=True)
-                    self.normalized_embeddings[base_name] = self.embeddings[base_name] / (norms + 1e-8)
+                    self.embeddings[base_name] = np.load(embed_path)["embeddings"]
+                    norms = np.linalg.norm(
+                        self.embeddings[base_name], axis=1, keepdims=True
+                    )
+                    self.normalized_embeddings[base_name] = self.embeddings[
+                        base_name
+                    ] / (norms + 1e-8)
 
                     with open(meta_path) as f:
-                        self.chunks[base_name] = json.load(f)
+                        data = json.load(f)
+                        if isinstance(data, dict) and "chunks" in data:
+                            self.chunks[base_name] = data["chunks"]
+                        else:
+                            self.chunks[base_name] = data
 
-    def search(self, query: str, top_k: int = 5, threshold: float = 0.0) -> List[Dict[str, Any]]:
+    def search(
+        self, query: str, top_k: int = 5, threshold: float = None
+    ) -> List[Dict[str, Any]]:
         """Search for similar code chunks using optimized cosine similarity.
 
         Args:
             query (str): The search query.
             top_k (int): The number of results to return.
-            threshold (float): The minimum similarity score threshold.
+            threshold (float): The minimum similarity score threshold. If None, uses the default threshold.
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries containing matched chunks and their scores.
         """
+        if threshold is None:
+            threshold = self.default_threshold
         self.total_searches += 1
         start_time = time.time()
         cache_key = f"{query}:{top_k}:{threshold}"
 
         if cache_key in self.query_cache:
             self.cache_hits += 1
+            logger.debug(f"Cache hit for query: {query}")
             return self.query_cache[cache_key]
 
         self.cache_misses += 1
-        query_emb: np.ndarray = np.array(generate_embed(query)[0])
-        query_norm: float = np.linalg.norm(query_emb)
-        normalized_query: np.ndarray = query_emb / (query_norm + 1e-8)
+        logger.debug(f"Cache miss for query: {query}, generating embedding")
+
+        try:
+            query_emb: np.ndarray = np.array(generate_embed(query)[0])
+            query_norm: float = np.linalg.norm(query_emb)
+
+            if query_norm < 1e-10:
+                logger.warning(f"Query embedding has near-zero norm: {query_norm}")
+                return []
+
+            normalized_query: np.ndarray = query_emb / query_norm
+        except Exception as e:
+            logger.error(f"Error generating embedding for query '{query}': {e}")
+            return []
+
         all_results: List[Dict[str, Any]] = []
 
-        for file_name, normalized_file_embeddings in self.normalized_embeddings.items():
-            similarities: np.ndarray = normalized_file_embeddings @ normalized_query
+        batch_size = 10
+        file_names = list(self.normalized_embeddings.keys())
 
-            if threshold > 0:
-                mask = similarities >= threshold
-                if not np.any(mask):
-                    continue
+        for i in range(0, len(file_names), batch_size):
+            batch_files = file_names[i : i + batch_size]
 
-                indices = np.where(mask)[0]
-                top_indices = indices[np.argsort(similarities[indices])[-min(top_k, len(indices)):][::-1]]
-            else:
-                top_indices: np.ndarray = np.argsort(similarities)[-top_k:][::-1]
+            for file_name in batch_files:
+                normalized_file_embeddings = self.normalized_embeddings[file_name]
 
-            for idx in top_indices:
-                score = float(similarities[idx])
-                if score >= threshold:
-                    all_results.append({
-                        'file': file_name,
-                        'chunk': self.chunks[file_name][idx],
-                        'score': score
-                    })
+                similarities: np.ndarray = normalized_file_embeddings @ normalized_query
 
-        all_results.sort(key=lambda x: x['score'], reverse=True)
-        results = all_results[:top_k]
+                if threshold > 0:
+                    mask = similarities >= threshold
+                    if not np.any(mask):
+                        continue
+
+                    indices = np.where(mask)[0]
+                    if len(indices) == 0:
+                        continue
+
+                    top_indices = indices[
+                        np.argsort(similarities[indices])[
+                            -min(top_k, len(indices)) :
+                        ][::-1]
+                    ]
+                else:
+                    top_indices: np.ndarray = np.argsort(similarities)[
+                        -min(top_k, len(similarities)) :
+                    ][::-1]
+
+                for idx in top_indices:
+                    score = float(similarities[idx])
+                    if score >= threshold:
+                        try:
+                            chunk_data = self.chunks[file_name]
+                            if isinstance(chunk_data, list) and idx < len(chunk_data):
+                                chunk = chunk_data[idx]
+                            else:
+                                chunk = {
+                                    "text": f"Chunk from {file_name}",
+                                    "start_line": 0,
+                                    "end_line": 0,
+                                    "type": "unknown",
+                                }
+
+                            all_results.append(
+                                {"file": file_name, "chunk": chunk, "score": score}
+                            )
+                        except (IndexError, KeyError) as e:
+                            logger.warning(
+                                f"Error accessing chunk {idx} for file {file_name}: {e}"
+                            )
+
+        all_results.sort(key=lambda x: x["score"], reverse=True)
+        top_results = all_results[:top_k]
+
+        search_duration = time.time() - start_time
+        self.search_time += search_duration
+        logger.debug(
+            f"Search completed in {search_duration:.4f}s with {len(top_results)} results"
+        )
 
         if len(self.query_cache) >= self.cache_size:
             self.query_cache.pop(next(iter(self.query_cache)))
-        self.query_cache[cache_key] = results
-        self.search_time += time.time() - start_time
+        self.query_cache[cache_key] = top_results
 
-        return results
+        return top_results
 
-    def search_multiple(self, queries: List[str], top_k: int = 5,
-                       threshold: float = 0.0) -> List[Dict[str, Any]]:
+    def search_multiple(
+        self, queries: List[str], top_k: int = 5, threshold: float = None
+    ) -> List[Dict[str, Any]]:
         """Search using multiple queries and combine results.
 
         This is useful when using query optimization to try multiple search terms.
@@ -546,34 +634,70 @@ class SimilaritySearch:
         Args:
             queries (List[str]): List of search queries.
             top_k (int): Number of results to return.
-            threshold (float): Minimum similarity score threshold.
+            threshold (float): Minimum similarity score threshold. If None, uses the default threshold.
 
         Returns:
             List[Dict[str, Any]]: List of dictionaries containing matched chunks and their scores.
         """
+        if threshold is None:
+            threshold = self.default_threshold
         if not queries:
             return []
 
         if len(queries) == 1:
             return self.search(queries[0], top_k, threshold)
 
+        logger.debug(f"Performing multi-query search with {len(queries)} variations")
+        start_time = time.time()
+
+        per_query_top_k = min(top_k * 2, 20)
+
         all_results: Dict[Tuple[str, int], Dict[str, Any]] = {}
 
-        for query in queries:
-            results = self.search(query, top_k, threshold)
+        query_contributions = {}
 
-            for result in results:
-                file_name = result['file']
-                chunk_idx = self.chunks[file_name].index(result['chunk'])
-                key = (file_name, chunk_idx)
+        for i, query in enumerate(queries):
+            try:
+                results = self.search(query, per_query_top_k, threshold)
 
-                if key not in all_results or result['score'] > all_results[key]['score']:
-                    all_results[key] = result
+                for result in results:
+                    file_name = result["file"]
+
+                    try:
+                        chunk = result["chunk"]
+                        chunk_idx = self.chunks[file_name].index(chunk)
+                    except (ValueError, KeyError, IndexError):
+                        start_line = chunk.get("start_line", 0)
+                        end_line = chunk.get("end_line", 0)
+                        chunk_idx = f"{start_line}-{end_line}"
+
+                    key = (file_name, chunk_idx)
+
+                    if key not in query_contributions:
+                        query_contributions[key] = []
+                    query_contributions[key].append(i)
+
+                    if (
+                        key not in all_results
+                        or result["score"] > all_results[key]["score"]
+                    ):
+                        all_results[key] = result
+
+            except Exception as e:
+                logger.error(f"Error processing query variation '{query}': {e}")
+                continue
 
         combined_results = list(all_results.values())
-        combined_results.sort(key=lambda x: x['score'], reverse=True)
+        combined_results.sort(key=lambda x: x["score"], reverse=True)
 
-        return combined_results[:top_k]
+        final_results = combined_results[:top_k]
+
+        search_duration = time.time() - start_time
+        logger.debug(
+            f"Multi-query search completed in {search_duration:.4f}s with {len(final_results)} results"
+        )
+
+        return final_results
 
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get performance statistics for the similarity search.
@@ -592,5 +716,5 @@ class SimilaritySearch:
             "avg_search_time": avg_search_time,
             "total_search_time": self.search_time,
             "num_files": len(self.embeddings),
-            "total_chunks": sum(len(chunks) for chunks in self.chunks.values())
+            "total_chunks": sum(len(chunks) for chunks in self.chunks.values()),
         }

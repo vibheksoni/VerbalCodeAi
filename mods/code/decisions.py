@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, AsyncGenerator
 
 import numpy as np
 
-from ..llms import generate_response, generate_embed, generate_response_stream
+from ..llms import generate_response, generate_embed, generate_response_stream, parse_thinking_tokens
 from .embed import SimilaritySearch
 
 logger = logging.getLogger("VerbalCodeAI.Decisions")
@@ -69,6 +69,7 @@ class QueryOptimizer:
     - Intent classification
     - Multi-perspective query generation
     - Context-aware search term prioritization
+    - Performance-optimized processing for different resource levels
     """
 
     QUERY_OPTIMIZATION_TEMPLATE = """You are an expert query optimization assistant for a code search system.
@@ -141,8 +142,12 @@ Respond with a JSON array of enhanced queries, between <enhanced_queries> tags:
 """
 
     def __init__(self):
+        """Initialize the QueryOptimizer."""
         self._terms_pattern = re.compile(r"<terms>\s*(.*?)\s*</terms>", re.DOTALL)
         self._enhanced_queries_pattern = re.compile(r"<enhanced_queries>\s*(.*?)\s*</enhanced_queries>", re.DOTALL)
+
+        self.performance_mode = os.getenv("PERFORMANCE_MODE", "MEDIUM").upper()
+        self.logger = logging.getLogger("VerbalCodeAI.Decisions.QueryOptimizer")
 
     def optimize_query(self, query: str, max_terms: int = 5) -> List[str]:
         """Process a user query to generate optimized search terms.
@@ -154,20 +159,22 @@ Respond with a JSON array of enhanced queries, between <enhanced_queries> tags:
         Returns:
             List[str]: A list of optimized search terms ranked by relevance.
         """
+        if self.performance_mode == "LOW":
+            words = query.split()
+            return [query] + [w for w in words if len(w) > 3][: max_terms - 1]
+
         messages = [
             {
                 "role": "system",
-                "content": "You are a query optimization assistant for code search. Extract key programming concepts and terms from user queries."
+                "content": "You are a query optimization assistant for code search. Extract key programming concepts and terms from user queries.",
             },
-            {
-                "role": "user",
-                "content": self.QUERY_OPTIMIZATION_TEMPLATE.format(query=query)
-            }
+            {"role": "user", "content": self.QUERY_OPTIMIZATION_TEMPLATE.format(query=query)},
         ]
 
-        response = generate_response(messages)
+        response = generate_response(messages, parse_thinking=False)
+        _, _, response_only = parse_thinking_tokens(response)
 
-        match = self._terms_pattern.search(response)
+        match = self._terms_pattern.search(response_only)
         if not match:
             words = query.split()
             return [query] + [w for w in words if len(w) > 3][: max_terms - 1]
@@ -194,20 +201,34 @@ Respond with a JSON array of enhanced queries, between <enhanced_queries> tags:
         Returns:
             List[str]: A list of enhanced queries that expand on the original query.
         """
+        if self.performance_mode == "LOW":
+            self.logger.info("Using LOW performance query enhancement (skipping)")
+            return [query]
+        elif self.performance_mode == "MEDIUM":
+            max_queries = min(max_queries, 3)
+            self.logger.info(
+                f"Using MEDIUM performance query enhancement (max {max_queries} queries)"
+            )
+        else:
+            self.logger.info(
+                f"Using MAX performance query enhancement (max {max_queries} queries)"
+            )
+
         messages = [
             {
                 "role": "system",
-                "content": "You are an expert query optimization assistant for code search. Generate enhanced versions of user queries that cover different aspects and perspectives."
+                "content": "You are an expert query optimization assistant for code search. Generate enhanced versions of user queries that cover different aspects and perspectives.",
             },
             {
                 "role": "user",
-                "content": self.ENHANCED_QUERY_TEMPLATE.format(query=query)
-            }
+                "content": self.ENHANCED_QUERY_TEMPLATE.format(query=query),
+            },
         ]
 
-        response = generate_response(messages)
+        response = generate_response(messages, parse_thinking=False)
+        _, _, response_only = parse_thinking_tokens(response)
 
-        match = self._enhanced_queries_pattern.search(response)
+        match = self._enhanced_queries_pattern.search(response_only)
         if not match:
             return [query]
 
@@ -216,7 +237,7 @@ Respond with a JSON array of enhanced queries, between <enhanced_queries> tags:
 
             queries_json = match.group(1).strip()
             enhanced_queries = json.loads(queries_json)
-            
+
             unique_queries = set()
             filtered_queries = []
 
@@ -258,6 +279,8 @@ Respond with a JSON array of enhanced queries, between <enhanced_queries> tags:
 
         Returns:
             Dict[str, List[str]]: Dictionary of entity types and their values.
+                The keys are entity types (functions, classes, variables, concepts, libraries)
+                and the values are lists of strings representing the extracted entities.
         """
         entity_template = """Analyze this query about code and extract key entities by category.
 Query: {query}
@@ -281,28 +304,36 @@ Respond with a JSON object with these categories as keys, between <entities> tag
 </entities>
 """
 
+        if self.performance_mode == "LOW":
+            self.logger.info("Using LOW performance entity extraction (skipping)")
+            return {
+                "functions": [],
+                "classes": [],
+                "variables": [],
+                "concepts": [],
+                "libraries": [],
+            }
+
         messages = [
             {
                 "role": "system",
-                "content": "You are an entity extraction assistant for code search."
+                "content": "You are an entity extraction assistant for code search.",
             },
-            {
-                "role": "user",
-                "content": entity_template.format(query=query)
-            }
+            {"role": "user", "content": entity_template.format(query=query)},
         ]
 
-        response = generate_response(messages)
+        response = generate_response(messages, parse_thinking=False)
+        _, _, response_only = parse_thinking_tokens(response)
 
         entities_pattern = re.compile(r"<entities>\s*(.*?)\s*</entities>", re.DOTALL)
-        match = entities_pattern.search(response)
+        match = entities_pattern.search(response_only)
 
         default_result = {
             "functions": [],
             "classes": [],
             "variables": [],
             "concepts": [],
-            "libraries": []
+            "libraries": [],
         }
 
         if not match:
@@ -332,6 +363,8 @@ class FileSelector:
     - Semantic understanding of code structure
     - Improved handling of documentation files
     - Support for different types of queries (how-to, conceptual, debugging)
+    - Performance-optimized selection strategies for different resource levels
+    - Function signature analysis for better relevance determination
     """
 
     RESPONSE_TEMPLATE = """You are an expert file selection assistant for a code search system. Your task is to identify which files are most relevant to a query.
@@ -363,8 +396,12 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
 """
 
     def __init__(self):
+        """Initialize the FileSelector."""
         self._response_pattern = re.compile(r"<files>\s*(.*?)\s*</files>", re.DOTALL)
         self.query_optimizer = QueryOptimizer()
+        
+        self.performance_mode = os.getenv("PERFORMANCE_MODE", "MEDIUM").upper()
+        self.logger = logging.getLogger("VerbalCodeAI.Decisions.FileSelector")
 
     def _format_file_info(self, file_info: FileInfo) -> str:
         """Format a single file's information using a concise format.
@@ -407,12 +444,146 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
 
         Args:
             query (str): The user's query or request.
+                query (str): The query string.
             files (List[FileInfo]): List of FileInfo objects containing file information.
+                files (List[FileInfo]): The list of files to pick from.
             use_optimization (bool): Whether to use query optimization. Defaults to True.
+                use_optimization (bool): Flag to use query optimization.
 
         Returns:
             List[str]: List of file paths that are relevant to the query.
         """
+        if self.performance_mode == "LOW":
+            return self._pick_files_low_performance(query, files)
+        elif self.performance_mode == "MEDIUM":
+            return self._pick_files_medium_performance(query, files, use_optimization)
+        else:
+            return self._pick_files_max_performance(query, files, use_optimization)
+
+    def _pick_files_low_performance(self, query: str, files: List[FileInfo]) -> List[str]:
+        """Select files using a more efficient approach for low-performance systems.
+
+        This method uses a simpler prompt and fewer queries to reduce resource usage.
+
+        Args:
+            query (str): The user's query or request.
+                query (str): The query string.
+            files (List[FileInfo]): List of FileInfo objects containing file information.
+                files (List[FileInfo]): The list of files to pick from.
+
+        Returns:
+            List[str]: List of file paths that are relevant to the query.
+        """
+        self.logger.info("Using LOW performance file selection strategy")
+
+        file_infos_with_signatures = []
+        for f in files:
+            info = f"{f.path} | {f.description.split('.')[0]}"
+            if f.signatures:
+                signatures = [sig['signature'] for sig in f.signatures[:2]]
+                if signatures:
+                    info += f" | Functions: {', '.join(signatures)}"
+            file_infos_with_signatures.append(f"- {info}")
+
+        file_infos_text = "\n".join(file_infos_with_signatures)
+
+        prompt = f"""Select files that are most relevant to this query: "{query}"
+
+Files:
+{file_infos_text}
+
+Respond ONLY with file paths, one per line, between <files> tags:
+<files>
+/path/to/file1.py
+/path/to/file2.py
+</files>
+"""
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a file selector. Select only the most relevant files for the query.",
+            },
+            {"role": "user", "content": prompt},
+        ]
+
+        response = generate_response(messages, parse_thinking=False)
+        _, _, response_only = parse_thinking_tokens(response)
+
+        return self._parse_response(response_only)
+
+    def _pick_files_medium_performance(self, query: str, files: List[FileInfo], use_optimization: bool) -> List[str]:
+        """Select files using a balanced approach for medium-performance systems.
+
+        This method uses a moderate number of optimized queries and includes function signatures.
+
+        Args:
+            query (str): The user's query or request.
+                query (str): The query string.
+            files (List[FileInfo]): List of FileInfo objects containing file information.
+                files (List[FileInfo]): The list of files to pick from.
+            use_optimization (bool): Whether to use query optimization.
+                use_optimization (bool): Flag to use query optimization.
+
+        Returns:
+            List[str]: List of file paths that are relevant to the query.
+        """
+        self.logger.info("Using MEDIUM performance file selection strategy")
+
+        all_relevant_files = set()
+
+        queries_to_use = [query]
+        if use_optimization:
+            enhanced_queries = self.query_optimizer.generate_enhanced_queries(query)[:3]
+            queries_to_use.extend(enhanced_queries)
+
+        for optimized_query in queries_to_use:
+            file_infos = []
+            for f in files:
+                info = f"- {f.path} | {f.description.split('.')[0]}"
+                if f.signatures:
+                    signatures = [f"{sig['type']}: {sig['signature']}" for sig in f.signatures[:3]]
+                    if signatures:
+                        info += f"\n  Signatures:\n  {' | '.join(signatures)}"
+                file_infos.append(info)
+
+            file_infos_text = "\n".join(file_infos)
+            prompt = self.RESPONSE_TEMPLATE.format(query=optimized_query, file_infos=file_infos_text)
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a file selector. Consider both exact matches and conceptual relevance.",
+                },
+                {"role": "user", "content": prompt},
+            ]
+
+            response = generate_response(messages, parse_thinking=False)
+            _, _, response_only = parse_thinking_tokens(response)
+
+            relevant_files = self._parse_response(response_only)
+            all_relevant_files.update(relevant_files)
+
+        return list(all_relevant_files)
+
+    def _pick_files_max_performance(self, query: str, files: List[FileInfo], use_optimization: bool) -> List[str]:
+        """Select files using the full optimization approach for high-performance systems.
+
+        This method uses all enhanced queries and detailed file information.
+
+        Args:
+            query (str): The user's query or request.
+                query (str): The query string.
+            files (List[FileInfo]): List of FileInfo objects containing file information.
+                files (List[FileInfo]): The list of files to pick from.
+            use_optimization (bool): Whether to use query optimization.
+                use_optimization (bool): Flag to use query optimization.
+
+        Returns:
+            List[str]: List of file paths that are relevant to the query.
+        """
+        self.logger.info("Using MAX performance file selection strategy")
+
         if use_optimization:
             enhanced_queries = self.query_optimizer.generate_enhanced_queries(query)
             all_relevant_files = set()
@@ -440,9 +611,11 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
                     },
                     {"role": "user", "content": prompt},
                 ]
-                response = generate_response(messages)
 
-                relevant_files = self._parse_response(response)
+                response = generate_response(messages, parse_thinking=False)
+                _, _, response_only = parse_thinking_tokens(response)
+
+                relevant_files = self._parse_response(response_only)
                 all_relevant_files.update(relevant_files)
 
             return list(all_relevant_files)
@@ -457,9 +630,11 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
                 },
                 {"role": "user", "content": prompt},
             ]
-            response = generate_response(messages)
 
-            return self._parse_response(response)
+            response = generate_response(messages, parse_thinking=False)
+            _, _, response_only = parse_thinking_tokens(response)
+
+            return self._parse_response(response_only)
 
     def filter_relevant_code(
         self,
@@ -528,7 +703,9 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
 
         Args:
             query (str): The user's natural language query.
+                query (str): The query string.
             max_terms (int): Maximum number of search terms to return. Defaults to 5.
+                max_terms (int): The maximum number of terms.
 
         Returns:
             List[str]: A list of optimized search terms ranked by relevance.
@@ -706,7 +883,7 @@ Based on these files, provide a concise summary of the project in JSON format:
             ]
 
             self.logger.info("Analyzing project files with AI...")
-            response = generate_response(messages)
+            response = generate_response(messages, parse_thinking=False)
 
             json_pattern = r'\{[\s\S]*\}'
             match = re.search(json_pattern, response)
@@ -786,13 +963,15 @@ class ChatHandler:
         """Clear the chat history."""
         self.chat_history = []
 
-    def process_query(self, query: str, max_chat_mode: bool = False, streaming: bool = False) -> Tuple[Union[str, AsyncGenerator[str, None]], List[str]]:
+    def process_query(
+        self, query: str, max_chat_mode: bool = False, streaming: bool = False
+    ) -> Tuple[Union[str, AsyncGenerator[str, None]], List[str]]:
         """Process a user query and generate an AI response.
 
         Args:
             query (str): The user's query.
-            max_chat_mode (bool, optional): Whether to use Max Chat mode, which sends full file contents to the AI. Defaults to False.
-            streaming (bool, optional): Whether to return a streaming response. Defaults to False.
+            max_chat_mode (bool): Whether to use Max Chat mode, which sends full file contents to the AI. Defaults to False.
+            streaming (bool): Whether to return a streaming response. Defaults to False.
 
         Returns:
             Tuple[Union[str, AsyncGenerator[str, None]], List[str]]:
@@ -800,10 +979,12 @@ class ChatHandler:
         """
         if not self.indexer:
             self.logger.error("Cannot process query: No indexer available")
-            return "Error: No code has been indexed yet. Please index a directory first.", []
+            return (
+                "Error: No code has been indexed yet. Please index a directory first.",
+                [],
+            )
 
         self.logger.info(f"Processing query: {query}")
-
         self.add_to_history("user", query)
 
         file_infos = []
@@ -811,24 +992,33 @@ class ChatHandler:
             metadata_dir = os.path.join(self.indexer.index_dir, "metadata")
             if not os.path.exists(metadata_dir):
                 self.logger.warning("Metadata directory does not exist")
-                return "Error: Metadata directory does not exist. Please reindex the code.", []
+                return (
+                    "Error: Metadata directory does not exist. Please reindex the code.",
+                    [],
+                )
 
-            metadata_files = [f for f in os.listdir(metadata_dir) if f.endswith('.json')]
+            metadata_files = [
+                f for f in os.listdir(metadata_dir) if f.endswith(".json")
+            ]
 
             for file in metadata_files:
                 try:
-                    with open(os.path.join(metadata_dir, file), 'r', encoding='utf-8') as f:
+                    with open(
+                        os.path.join(metadata_dir, file), "r", encoding="utf-8"
+                    ) as f:
                         metadata = json.load(f)
 
                     file_info = FileInfo(
                         name=os.path.basename(metadata["path"]),
                         path=metadata["path"],
                         description=metadata.get("description", ""),
-                        chunks=[]
+                        chunks=[],
                     )
 
                     try:
-                        with open(metadata["path"], "r", encoding="utf-8", errors="replace") as f:
+                        with open(
+                            metadata["path"], "r", encoding="utf-8", errors="replace"
+                        ) as f:
                             content = f.read()
 
                         chunks = [
@@ -855,7 +1045,9 @@ class ChatHandler:
         messages = []
 
         if self.project_info:
-            project_context = "You are assisting with a codebase. Here's some information about the project:\n\n"
+            project_context = (
+                "You are assisting with a codebase. Here's some information about the project:\n\n"
+            )
             for key, value in self.project_info.items():
                 if isinstance(value, list):
                     value_str = ", ".join(value)
@@ -888,13 +1080,22 @@ class ChatHandler:
 
         self.logger.info("Generating AI response...")
 
+        project_path = self.indexer.root_path if self.indexer else ""
+
         if streaming:
             self.logger.info("Using streaming response generation")
-            response_generator = generate_response_stream(messages)
+            response_generator = generate_response_stream(
+                messages, project_path=project_path
+            )
             return response_generator, relevant_files
         else:
-            response = generate_response(messages)
+            full_response, thinking_tokens, clean_response = generate_response(
+                messages, project_path=project_path, parse_thinking=True
+            )
 
-            self.add_to_history("assistant", response)
+            if thinking_tokens.thinking_found:
+                self.logger.info(f"AI thinking tokens: {thinking_tokens.total_tokens}")
 
-            return response, relevant_files
+            self.add_to_history("assistant", full_response)
+
+            return clean_response, relevant_files
