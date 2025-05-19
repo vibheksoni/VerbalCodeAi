@@ -52,9 +52,13 @@ class CodebaseTools:
         self.similarity_search = None
         self.logger = logging.getLogger("VerbalCodeAI.Tools")
 
-        if self.indexer and self.indexer.index_dir:
+        if self.indexer and hasattr(self.indexer, "similarity_search") and self.indexer.similarity_search:
+            self.logger.info("Using shared SimilaritySearch instance from indexer")
+            self.similarity_search = self.indexer.similarity_search
+        elif self.indexer and self.indexer.index_dir:
             embeddings_dir = os.path.join(self.indexer.index_dir, "embeddings")
             if os.path.exists(embeddings_dir):
+                self.logger.warning("Creating new SimilaritySearch instance (not using shared instance)")
                 self.similarity_search = SimilaritySearch(embeddings_dir=embeddings_dir)
 
     def _collect_file_paths_recursive_from_entry(
@@ -1544,6 +1548,92 @@ class CodebaseTools:
         except Exception as e:
             self.logger.error(f"Error in code_analysis: {e}", exc_info=True)
             return {"error": f"Error analyzing code: {str(e)}"}
+
+    def get_file_description(self, file_path: str) -> str:
+        """Get the description of a file from the descriptions directory.
+
+        Args:
+            file_path (str): Path to the file (can be imprecise, partial, or full path).
+
+        Returns:
+            str: The description of the file, or an error message if not found.
+        """
+        if not self.indexer:
+            self.logger.error("Cannot perform get_file_description: No indexer available")
+            return "Error: No indexed codebase available. Please index a directory first."
+
+        try:
+            self.logger.info(f"Getting file description for: {file_path}")
+
+            resolved_path = self.find_closest_file_match(file_path)
+            if not resolved_path:
+                return f"Error: File not found: {file_path}"
+
+            description_file_name = resolved_path.replace('/', '_').replace('\\', '_') + '.txt'
+            descriptions_dir = os.path.join(self.indexer.index_dir, "descriptions")
+
+            if not os.path.exists(descriptions_dir):
+                return f"Error: Descriptions directory does not exist: {descriptions_dir}"
+
+            description_file_path = os.path.join(descriptions_dir, description_file_name)
+
+            if not os.path.exists(description_file_path):
+                return f"No description found for file: {resolved_path}"
+
+            try:
+                with open(description_file_path, 'r', encoding='utf-8') as f:
+                    description = f.read()
+                return description
+            except Exception as e:
+                self.logger.error(f"Error reading description file {description_file_path}: {e}")
+                return f"Error reading description file: {str(e)}"
+
+        except Exception as e:
+            self.logger.error(f"Error in get_file_description: {e}", exc_info=True)
+            return f"Error getting file description: {str(e)}"
+
+    def get_file_metadata(self, file_path: str) -> Dict[str, Any]:
+        """Get the metadata of a file from the metadata directory.
+
+        Args:
+            file_path (str): Path to the file (can be imprecise, partial, or full path).
+
+        Returns:
+            Dict[str, Any]: The metadata of the file, or an error message if not found.
+        """
+        if not self.indexer:
+            self.logger.error("Cannot perform get_file_metadata: No indexer available")
+            return {"error": "No indexed codebase available. Please index a directory first."}
+
+        try:
+            self.logger.info(f"Getting file metadata for: {file_path}")
+
+            resolved_path = self.find_closest_file_match(file_path)
+            if not resolved_path:
+                return {"error": f"File not found: {file_path}"}
+
+            metadata_file_name = resolved_path.replace('/', '_').replace('\\', '_') + '.json'
+            metadata_dir = os.path.join(self.indexer.index_dir, "metadata")
+
+            if not os.path.exists(metadata_dir):
+                return {"error": f"Metadata directory does not exist: {metadata_dir}"}
+
+            metadata_file_path = os.path.join(metadata_dir, metadata_file_name)
+
+            if not os.path.exists(metadata_file_path):
+                return {"error": f"No metadata found for file: {resolved_path}"}
+
+            try:
+                with open(metadata_file_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                return metadata
+            except Exception as e:
+                self.logger.error(f"Error reading metadata file {metadata_file_path}: {e}")
+                return {"error": f"Error reading metadata file: {str(e)}"}
+
+        except Exception as e:
+            self.logger.error(f"Error in get_file_metadata: {e}", exc_info=True)
+            return {"error": f"Error getting file metadata: {str(e)}"}
 
     def explain_code(
         self, path: str, line_start: int = None, line_end: int = None

@@ -629,6 +629,7 @@ Respond ONLY with file paths, one per line, between <files> tags. For example:
         """Initialize the FileSelector."""
         self._response_pattern = re.compile(r"<files>\s*(.*?)\s*</files>", re.DOTALL)
         self.query_optimizer = QueryOptimizer()
+        self.similarity_search = None
 
         self.performance_mode = os.getenv("PERFORMANCE_MODE", "MEDIUM").upper()
         self.logger = logging.getLogger("VerbalCodeAI.Decisions.FileSelector")
@@ -873,6 +874,7 @@ Respond ONLY with file paths, one per line, between <files> tags:
         top_k: int = 5,
         min_score: float = 0.1,
         use_optimization: bool = True,
+        indexer = None,
     ) -> List[RelevantCode]:
         """Filter and return the most relevant code chunks from the selected files based on the query.
 
@@ -882,16 +884,57 @@ Respond ONLY with file paths, one per line, between <files> tags:
             top_k (int): Number of most relevant code chunks to return. Defaults to 5.
             min_score (float): Minimum similarity score threshold. Defaults to 0.1.
             use_optimization (bool): Whether to use query optimization. Defaults to True.
+            indexer: Optional FileIndexer instance to get the shared SimilaritySearch instance.
 
         Returns:
             List[RelevantCode]: List of RelevantCode objects containing the most relevant code chunks and their scores.
         """
+        if indexer and hasattr(indexer, "similarity_search") and indexer.similarity_search:
+            if self.similarity_search != indexer.similarity_search:
+                self.similarity_search = indexer.similarity_search
+                self.logger.info("Using shared SimilaritySearch instance from indexer")
+
         search_queries = [query]
         if use_optimization:
             optimized_terms = self.query_optimizer.optimize_query(query)
             if optimized_terms:
                 search_queries.extend(optimized_terms)
 
+        if self.similarity_search:
+            self.logger.info(f"Using SimilaritySearch for filter_relevant_code with {len(search_queries)} queries")
+
+            if len(search_queries) > 1:
+                results = self.similarity_search.search_multiple(search_queries, top_k=top_k*2, threshold=min_score)
+            else:
+                results = self.similarity_search.search(query, top_k=top_k*2, threshold=min_score)
+
+            all_results = []
+            for result in results:
+                file_name = result.get("file", "")
+                chunk = result.get("chunk", {})
+                score = result.get("score", 0.0)
+
+                signature = None
+                for file_info in files:
+                    if file_info.path == file_name and file_info.signatures:
+                        for sig in file_info.signatures:
+                            if sig["signature"] in chunk.get("text", ""):
+                                signature = sig["signature"]
+                                break
+
+                all_results.append(
+                    RelevantCode(
+                        file_path=file_name,
+                        chunk=chunk,
+                        score=float(score),
+                        signature=signature,
+                    )
+                )
+
+            all_results.sort(key=lambda x: x.score, reverse=True)
+            return all_results[:top_k]
+
+        self.logger.warning("No SimilaritySearch instance available, using fallback method")
         query_embeddings = [np.array(generate_embed(q)[0]) for q in search_queries]
 
         all_results = []
@@ -1163,6 +1206,11 @@ class ChatHandler:
         self.last_chat_id = ""
         self.logger = logging.getLogger("VerbalCodeAI.Decisions.ChatHandler")
 
+        if hasattr(self.indexer, "similarity_search") and self.indexer.similarity_search:
+            self.logger.info("ChatHandler initialized with shared SimilaritySearch instance from indexer")
+        else:
+            self.logger.warning("ChatHandler initialized without shared SimilaritySearch instance")
+
     def set_project_info(self, project_info: Dict[str, Any]) -> None:
         """Set the project information to use for context.
 
@@ -1389,6 +1437,10 @@ class ChatHandler:
         except Exception as e:
             self.logger.error(f"Error getting file infos: {e}")
             return f"Error getting file information: {e}", []
+
+        if hasattr(self.file_selector, "similarity_search") and not self.file_selector.similarity_search and hasattr(self.indexer, "similarity_search"):
+            self.logger.info("Passing indexer to file_selector for shared SimilaritySearch instance")
+            self.file_selector.similarity_search = self.indexer.similarity_search
 
         relevant_files = self.file_selector.pick_files(query, file_infos)
 

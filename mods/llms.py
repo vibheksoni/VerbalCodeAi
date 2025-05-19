@@ -493,7 +493,10 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
         text (Union[str, List[str]]): Single string or list of strings to embed.
 
     Returns:
-        List[List[float]]: List of embedding vectors.
+        List[List[float]]: List of embedding vectors. Each vector is a list of floats.
+        For a single input text, returns a list containing one embedding vector.
+        For multiple input texts, returns a list of embedding vectors, one for each input text.
+        If the embedding generation fails, returns a list of default embeddings (all zeros).
 
     Raises:
         ValueError: If EMBEDDING_MODEL is not set.
@@ -596,7 +599,24 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
                 response = ollama.embed(model=EMBEDDING_MODEL, input=texts_to_process)
                 if is_small_batch:
                     logger.debug("Ollama API returned embeddings successfully")
-                embeddings_for_misses = response.embeddings
+                    
+                if hasattr(response, 'embeddings'):
+                    embeddings_for_misses = []
+                    for embedding in response.embeddings:
+                        if not isinstance(embedding, list):
+                            logger.warning(f"Embedding has wrong type: {type(embedding)}, using default embedding")
+                            embeddings_for_misses.append([0.0] * 384)
+                        elif len(embedding) == 0:
+                            logger.warning("Embedding is empty, using default embedding")
+                            embeddings_for_misses.append([0.0] * 384)
+                        else:
+                            if isinstance(embedding[0], list):
+                                embeddings_for_misses.append(embedding)
+                            else:
+                                embeddings_for_misses.append(embedding)
+                else:
+                    logger.warning("Ollama response does not have embeddings attribute")
+                    embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
             except ollama.ResponseError as e:
                 logger.error(f"Ollama ResponseError: {str(e)}")
                 embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
@@ -1495,18 +1515,14 @@ def generate_description(
             try:
                 response = _generate_description_openrouter(prompt, temperature, max_tokens)
             except Exception as e:
-                # Check if it's a rate limit error
                 if "rate limit" in str(e).lower():
                     logger.warning(f"OpenRouter rate limit hit. Falling back to Ollama: {str(e)}")
-                    # Fall back to Ollama
                     response = _generate_description_ollama(prompt, temperature, max_tokens)
                 else:
-                    # Re-raise other errors
                     raise
         else:
             response = _generate_description_ollama(prompt, temperature, max_tokens)
     except Exception as e:
-        # Add more context to the error message
         error_msg = f"Error generating description with provider '{AI_DESCRIPTION_PROVIDER}': {str(e)}"
         logger.error(error_msg, exc_info=True)
         raise Exception(error_msg)

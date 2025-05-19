@@ -132,6 +132,18 @@ Available tools:
     - Use this when you need a second opinion or help with a specific problem
     - Example: ask_buddy("What's the best way to implement authentication in this project?")
 
+15. get_file_description(file_path: str) - Get the description of a file from the descriptions directory.
+    - file_path: Path to the file (can be imprecise, partial, or full path)
+    - Returns: The description of the file, or an error message if not found
+    - Use this to get a high-level description of a file's purpose and functionality
+    - Example: get_file_description("src/auth.py")
+
+16. get_file_metadata(file_path: str) - Get the metadata of a file from the metadata directory.
+    - file_path: Path to the file (can be imprecise, partial, or full path)
+    - Returns: Dictionary with file metadata including name, path, hash, size, extension, modified time, description, and signatures
+    - Use this to get detailed metadata about a file
+    - Example: get_file_metadata("src/auth.py")
+
 When a tool needs to be called as part of a step, you MUST format the request for the tool within <tool_call_request> XML tags like this:
 <tool_call_request>
 {
@@ -173,6 +185,8 @@ Consider which tools would be most effective for the user's query:
 12. explain_code - To get an explanation of code (useful for understanding complex snippets)
 13. get_project_description - To get an overview of the project (useful for understanding the project structure and purpose)
 14. ask_buddy - To get a second opinion from another AI model (useful when you need help with a specific problem)
+15. get_file_description - To get a high-level description of a file's purpose and functionality
+16. get_file_metadata - To get detailed metadata about a file
 
 Choose the most appropriate tool(s) based on:
 - The specificity of the user's query
@@ -296,6 +310,8 @@ Remember that you have access to these tools:
 12. explain_code - To get an explanation of code
 13. get_project_description - To get an overview of the project
 14. ask_buddy - To get a second opinion from another AI model
+15. get_file_description - To get a high-level description of a file's purpose and functionality
+16. get_file_metadata - To get detailed metadata about a file
 
 Example if more info needed:
 <thinking>The search results show 'auth.py' is relevant. I should first get file stats to understand its size and structure before reading it.</thinking>
@@ -443,6 +459,14 @@ These components work together to provide a secure authentication flow where tok
         self.last_directory_tree_run_time = 0
         self.directory_tree_cache = None
 
+        if self.tools.similarity_search:
+            if hasattr(self.indexer, "similarity_search") and self.tools.similarity_search is self.indexer.similarity_search:
+                self.logger.info("AgentMode initialized with shared SimilaritySearch instance from indexer")
+            else:
+                self.logger.warning("AgentMode initialized with its own SimilaritySearch instance (not shared)")
+        else:
+            self.logger.warning("AgentMode initialized without any SimilaritySearch instance")
+
     def add_to_history(self, role: str, content: str) -> None:
         """Add a message to the chat history.
 
@@ -474,7 +498,8 @@ These components work together to provide a secure authentication flow where tok
                         'embed_search', 'grep', 'read_file', 'directory_tree',
                         'find_functions', 'find_classes', 'git_history', 'search_imports',
                         'find_usage', 'code_analysis', 'explain_code', 'file_stats',
-                        'get_project_description', 'ask_buddy'
+                        'get_project_description', 'ask_buddy', 'get_file_description',
+                        'get_file_metadata'
                     ]
                     if tool_call['name'] not in valid_tools:
                         self.logger.warning(f"Invalid tool name found: {tool_call['name']}")
@@ -630,6 +655,18 @@ These components work together to provide a secure authentication flow where tok
                     result = {"error": "No question provided for ask_buddy tool"}
                 else:
                     result = self.tools.ask_buddy(question)
+            elif tool_name == 'get_file_description':
+                file_path = parameters.get('file_path', '')
+                if not file_path:
+                    result = {"error": "No file_path provided for get_file_description tool"}
+                else:
+                    result = {"description": self.tools.get_file_description(file_path)}
+            elif tool_name == 'get_file_metadata':
+                file_path = parameters.get('file_path', '')
+                if not file_path:
+                    result = {"error": "No file_path provided for get_file_metadata tool"}
+                else:
+                    result = self.tools.get_file_metadata(file_path)
             else:
                 result = {"error": f"Unknown tool: {tool_name}"}
         except Exception as e:
@@ -1170,12 +1207,45 @@ These components work together to provide a secure authentication flow where tok
                             else:
                                 response_preview = response
 
-                            result_summary = f"Buddy ({provider}/{model}) responded: {response_preview}"
+                elif current_tool_call['name'] == 'get_file_description':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error: {tool_result['error']}"
+                        else:
+                            description = tool_result.get("description", "")
+                            if len(description) > 50:
+                                description_preview = description[:47] + "..."
+                            else:
+                                description_preview = description
+                            result_summary = f"Description: {description_preview}"
 
-                            print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
-                            print(f"{Fore.CYAN}Buddy's full response:{Style.RESET_ALL}")
-                            print(f"{Fore.WHITE}{response}{Style.RESET_ALL}")
-                            result_summary = ""
+                elif current_tool_call['name'] == 'get_file_metadata':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error: {tool_result['error']}"
+                        else:
+                            file_name = tool_result.get("name", "unknown")
+                            file_path = tool_result.get("path", "unknown")
+                            file_extension = tool_result.get("extension", "unknown")
+                            result_summary = f"Metadata for {file_name} ({file_extension})"
+
+                if current_tool_call['name'] == 'ask_buddy':
+                    if isinstance(tool_result, dict) and "response" in tool_result:
+                        response = tool_result.get("response", "")
+                        provider = tool_result.get("provider", "unknown")
+                        model = tool_result.get("model", "unknown")
+
+                        if len(response) > 50:
+                            response_preview = response[:47] + "..."
+                        else:
+                            response_preview = response
+
+                        result_summary = f"Buddy ({provider}/{model}) responded: {response_preview}"
+
+                        print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Buddy's full response:{Style.RESET_ALL}")
+                        print(f"{Fore.WHITE}{response}{Style.RESET_ALL}")
+                        result_summary = ""
 
                 else:
                     result_str = str(tool_result)

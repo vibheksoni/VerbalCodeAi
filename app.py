@@ -122,7 +122,7 @@ class VerbalCodeAI:
 
         self.logger: logging.Logger = logging.getLogger("VerbalCodeAI")
         self.indexer: Optional[FileIndexer] = None
-        self.file_selector: FileSelector = FileSelector()
+        self.file_selector: Optional[FileSelector] = None
         self.project_analyzer: Optional[ProjectAnalyzer] = None
         self.chat_handler: Optional[ChatHandler] = None
         self.settings_path: str = os.path.join(os.path.dirname(__file__), ".app_settings.json")
@@ -326,6 +326,8 @@ class VerbalCodeAI:
             if not self.indexer or self.indexer.root_path != directory:
                 self.logger.info(f"Creating indexer for directory: {directory}")
                 self.indexer: FileIndexer = FileIndexer(directory)
+                
+                self.file_selector: FileSelector = FileSelector()
 
                 self.project_analyzer: ProjectAnalyzer = ProjectAnalyzer(self.indexer)
                 self.chat_handler: ChatHandler = ChatHandler(self.indexer, self.file_selector)
@@ -531,7 +533,8 @@ class VerbalCodeAI:
         print(f"{Fore.YELLOW}In Agent Mode, the AI can use tools to explore and understand your codebase.")
         print(f"{Fore.YELLOW}Available tools: embed_search, grep, read_file, directory_tree, find_functions, find_classes,")
         print(f"{Fore.YELLOW}               git_history, search_imports, find_usage, code_analysis, explain_code,")
-        print(f"{Fore.YELLOW}               file_stats, get_project_description, ask_buddy")
+        print(f"{Fore.YELLOW}               file_stats, get_project_description, ask_buddy, get_file_description,")
+        print(f"{Fore.YELLOW}               get_file_metadata")
         print(
             f"{Fore.YELLOW}Type your questions about the codebase. Type '{Fore.RED}exit{Fore.YELLOW}' to return to the main menu.{Style.RESET_ALL}"
         )

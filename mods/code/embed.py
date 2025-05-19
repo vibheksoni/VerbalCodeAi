@@ -12,7 +12,6 @@ from ..llms import generate_embed
 
 logger = logging.getLogger("VerbalCodeAI.CodeEmbed")
 
-
 class CodeChunker:
     """
     A class to chunk code files using tree-sitter for intelligent code splitting.
@@ -241,7 +240,6 @@ class CodeChunker:
 
         return chunks
 
-
 class CodeEmbedding:
     """
     A class to generate and manage code embeddings with advanced features.
@@ -435,7 +433,6 @@ class CodeEmbedding:
             "reduced_dims": self.reduced_dims if self.use_dimensionality_reduction else None
         }
 
-
 class SimilaritySearch:
     """
     A class for efficient similarity search in code embeddings.
@@ -492,6 +489,7 @@ class SimilaritySearch:
         if not os.path.exists(self.embeddings_dir):
             return
 
+        npz_files_loaded = 0
         for file in os.listdir(self.embeddings_dir):
             if file.endswith(".npz"):
                 base_name: str = os.path.splitext(file)[0]
@@ -499,20 +497,91 @@ class SimilaritySearch:
                 meta_path: str = os.path.join(self.embeddings_dir, f"{base_name}.json")
 
                 if os.path.exists(meta_path):
-                    self.embeddings[base_name] = np.load(embed_path)["embeddings"]
-                    norms = np.linalg.norm(
-                        self.embeddings[base_name], axis=1, keepdims=True
-                    )
-                    self.normalized_embeddings[base_name] = self.embeddings[
-                        base_name
-                    ] / (norms + 1e-8)
+                    try:
+                        self.embeddings[base_name] = np.load(embed_path)["embeddings"]
+                        norms = np.linalg.norm(
+                            self.embeddings[base_name], axis=1, keepdims=True
+                        )
+                        self.normalized_embeddings[base_name] = self.embeddings[
+                            base_name
+                        ] / (norms + 1e-8)
 
-                    with open(meta_path) as f:
-                        data = json.load(f)
-                        if isinstance(data, dict) and "chunks" in data:
-                            self.chunks[base_name] = data["chunks"]
-                        else:
-                            self.chunks[base_name] = data
+                        with open(meta_path) as f:
+                            data = json.load(f)
+                            if isinstance(data, dict) and "chunks" in data:
+                                self.chunks[base_name] = data["chunks"]
+                            else:
+                                self.chunks[base_name] = data
+                        npz_files_loaded += 1
+                    except Exception as e:
+                        logger.warning(f"Error loading NPZ file {embed_path}: {e}")
+        
+        if npz_files_loaded == 0:
+            logger.info("No NPZ files found. Attempting to load embeddings directly from JSON files.")
+            json_files_loaded = 0
+
+            for file in os.listdir(self.embeddings_dir):
+                if file.endswith(".json"):
+                    base_name: str = os.path.splitext(file)[0]
+                    json_path: str = os.path.join(self.embeddings_dir, file)
+
+                    try:
+                        with open(json_path) as f:
+                            data = json.load(f)
+
+                            if isinstance(data, dict) and "embeddings" in data and isinstance(data["embeddings"], list):
+                                self.embeddings[base_name] = np.array(data["embeddings"])
+
+                                norms = np.linalg.norm(
+                                    self.embeddings[base_name], axis=1, keepdims=True
+                                )
+                                self.normalized_embeddings[base_name] = self.embeddings[
+                                    base_name
+                                ] / (norms + 1e-8)
+
+                                if "chunks" in data:
+                                    self.chunks[base_name] = data["chunks"]
+                                else:
+                                    self.chunks[base_name] = data
+
+                                json_files_loaded += 1
+                            elif isinstance(data, dict) and "chunks" in data and "path" in data:
+                                if "embeddings" in data and isinstance(data["embeddings"], list):
+                                    try:
+                                        embeddings_data = data["embeddings"]
+
+                                        if len(embeddings_data) > 0:
+                                            if isinstance(embeddings_data[0], (list, tuple)) and len(embeddings_data[0]) > 0:
+                                                self.embeddings[base_name] = np.array(embeddings_data)
+                                            elif isinstance(embeddings_data[0], (int, float)):
+                                                self.embeddings[base_name] = np.array([embeddings_data])
+                                            else:
+                                                logger.warning(f"Unknown embedding format in {json_path}: {type(embeddings_data[0])}")
+                                                continue
+                                        else:
+                                            logger.warning(f"Empty embeddings list in {json_path}")
+                                            continue
+
+                                        norms = np.linalg.norm(
+                                            self.embeddings[base_name], axis=1, keepdims=True
+                                        )
+                                        self.normalized_embeddings[base_name] = self.embeddings[
+                                            base_name
+                                        ] / (norms + 1e-8)
+
+                                        self.chunks[base_name] = data["chunks"]
+
+                                        json_files_loaded += 1
+                                    except Exception as e:
+                                        logger.warning(f"Error processing embeddings in {json_path}: {e}")
+                                        continue
+                    except Exception as e:
+                        logger.warning(f"Error loading embeddings from JSON file {json_path}: {e}")
+
+            if json_files_loaded > 0:
+                logger.info(f"Successfully loaded embeddings from {json_files_loaded} JSON files.")
+            else:
+                logger.warning("No embeddings could be loaded from either NPZ or JSON files.")
 
     def search(
         self, query: str, top_k: int = 5, threshold: float = None
@@ -542,7 +611,29 @@ class SimilaritySearch:
         logger.debug(f"Cache miss for query: {query}, generating embedding")
 
         try:
-            query_emb: np.ndarray = np.array(generate_embed(query)[0])
+            query_emb_result = generate_embed(query)
+            if not query_emb_result or len(query_emb_result) == 0:
+                logger.warning(f"Failed to generate embedding for query: {query}")
+                return []
+
+            if isinstance(query_emb_result[0], (float, int)):
+                query_emb_result = [query_emb_result]
+                logger.debug(f"Converted flat embedding to nested list format")
+
+            query_emb: np.ndarray = np.array(query_emb_result[0])
+
+            if query_emb.size == 0:
+                logger.warning(f"Query embedding is empty for query: {query}")
+                return []
+
+            if len(query_emb.shape) == 0:
+                logger.warning(f"Query embedding has wrong shape: {query_emb.shape}")
+                try:
+                    query_emb = np.array([float(query_emb)])
+                    logger.debug(f"Reshaped scalar embedding to 1D array: {query_emb.shape}")
+                except:
+                    return []
+
             query_norm: float = np.linalg.norm(query_emb)
 
             if query_norm < 1e-10:
@@ -565,7 +656,22 @@ class SimilaritySearch:
             for file_name in batch_files:
                 normalized_file_embeddings = self.normalized_embeddings[file_name]
 
-                similarities: np.ndarray = normalized_file_embeddings @ normalized_query
+                if normalized_file_embeddings.size == 0:
+                    logger.warning(f"File embeddings are empty for file: {file_name}")
+                    continue
+
+                if len(normalized_file_embeddings.shape) < 2:
+                    normalized_file_embeddings = normalized_file_embeddings.reshape(1, -1)
+
+                if normalized_file_embeddings.shape[1] != normalized_query.shape[0]:
+                    logger.warning(f"Incompatible dimensions for matrix multiplication: file embeddings shape {normalized_file_embeddings.shape}, query shape {normalized_query.shape}")
+                    continue
+
+                try:
+                    similarities: np.ndarray = normalized_file_embeddings @ normalized_query
+                except Exception as e:
+                    logger.error(f"Error computing similarities for file {file_name}: {e}")
+                    continue
 
                 if threshold > 0:
                     mask = similarities >= threshold

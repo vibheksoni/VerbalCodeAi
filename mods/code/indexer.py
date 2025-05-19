@@ -29,7 +29,7 @@ from .directory import (
     HASH_ALGORITHM,
     HASH_BUFFER_SIZE,
 )
-from .embed import CodeEmbedding
+from .embed import CodeEmbedding, SimilaritySearch
 
 logger = logging.getLogger("VerbalCodeAI.Indexer")
 logger.info("[INDEXER] LOGGER WORKING")
@@ -338,6 +338,8 @@ class FileIndexer:
             self.metadata_cache: Dict[str, Any] = {}
             direct_logger.log("Initialized empty metadata_cache")
 
+            self.similarity_search: Optional[SimilaritySearch] = None
+
             direct_logger.log("Calling _create_index_structure()")
             self._create_index_structure()
             direct_logger.log("_create_index_structure() completed")
@@ -345,6 +347,10 @@ class FileIndexer:
             direct_logger.log("Calling _load_metadata_cache()")
             self._load_metadata_cache()
             direct_logger.log("_load_metadata_cache() completed")
+
+            direct_logger.log("Initializing SimilaritySearch")
+            self._initialize_similarity_search()
+            direct_logger.log("SimilaritySearch initialization completed")
 
             direct_logger.log("FileIndexer.__init__ completed successfully")
         except Exception as e:
@@ -845,6 +851,26 @@ END OF FILE:
                 exc_info=True,
             )
             raise
+
+    def _initialize_similarity_search(self) -> None:
+        """Initialize the SimilaritySearch instance.
+
+        This creates a SimilaritySearch object that can be used by both the agent mode
+        and chat features to ensure they're using the same embeddings.
+        """
+        embeddings_dir = os.path.join(self.index_dir, "embeddings")
+        logger.debug(f"Initializing SimilaritySearch with embeddings directory: {embeddings_dir}")
+
+        if os.path.exists(embeddings_dir):
+            try:
+                self.similarity_search = SimilaritySearch(embeddings_dir=embeddings_dir)
+                logger.info(f"SimilaritySearch initialized successfully with {len(self.similarity_search.embeddings)} embedding files")
+            except Exception as e:
+                logger.error(f"Error initializing SimilaritySearch: {e}", exc_info=True)
+                self.similarity_search = None
+        else:
+            logger.warning(f"Embeddings directory does not exist: {embeddings_dir}")
+            self.similarity_search = None
 
     def _load_metadata_cache(self) -> None:
         """Load all existing metadata into cache."""
