@@ -41,17 +41,64 @@ During the Information Gathering stage, you should:
 - Continue gathering information until you have a complete understanding
 - Consider alternative approaches if initial tools don't yield useful results
 - Prioritize depth of understanding over breadth when appropriate
+- Always perform case-insensitive searches by default to ensure you find all relevant results
+- Combine tools when necessary for comprehensive analysis (e.g., use semantic_search followed by cross_reference)
+- When searching for text, consider all case variations (lowercase and uppercase) to yield better results
 
 You will be provided with the current directory structure. Use this to inform your tool usage, especially for file paths.
-Available tools:
+Available tools are organized by category for easier reference:
 
-1.  file_stats(path: str) - Get statistics about a file including line count, size, and other metadata.
+# SEARCH TOOLS
+
+1.  embed_search(query: str, max_results: int = 5) - Search the codebase using vector embeddings.
+    - query: The search query string (natural language or code)
+    - max_results: Maximum number of results to return (default: 5)
+    - Returns: List of results containing file paths and matching code snippets
+    - Best for concept-based queries and finding relevant code snippets
+    - Example: embed_search("user authentication") or embed_search("database connection", 10)
+
+2.  semantic_search(query: str, max_results: int = 5, search_mode: str = "comprehensive") - Perform a semantic search with enhanced understanding of code concepts.
+    - query: The search query in natural language
+    - max_results: Maximum number of results to return (default: 5)
+    - search_mode: Search mode - "comprehensive", "function", "class", "comment" (default: "comprehensive")
+    - Returns: List of semantically relevant results with file paths, context, and relevance explanations
+    - Best for understanding code concepts and finding related code across the codebase
+    - Example: semantic_search("authentication flow", 5, "comprehensive")
+
+3.  grep(search_pattern: str, file_pattern: str = None) - Search the codebase using regex patterns.
+    - search_pattern: The regex pattern to search for
+    - file_pattern: Optional filter for specific file types (e.g., "*.py", "*.js")
+    - Returns: List of matches with file paths and line numbers
+    - Best for exact text matches and finding specific strings
+    - Example: grep("def process_data", "*.py") or grep("useState\\(")
+
+4.  regex_advanced_search(search_pattern: str, file_pattern: str = None, case_sensitive: bool = False, whole_word: bool = False, include_context: bool = True, context_lines: int = 2) - Perform an advanced regex search with additional options.
+    - search_pattern: The regex pattern to search for
+    - file_pattern: Optional filter for specific file types
+    - case_sensitive: Whether the search is case sensitive (default: False)
+    - whole_word: Whether to match whole words only (default: False)
+    - include_context: Whether to include context lines around matches (default: True)
+    - context_lines: Number of context lines to include (default: 2)
+    - Returns: List of matches with file paths, line numbers, and context
+    - Example: regex_advanced_search("auth.*token", "*.py", case_sensitive=False, whole_word=True)
+
+5.  file_type_search(search_pattern: str, file_extensions: List[str], case_sensitive: bool = False) - Search for a pattern in specific file types.
+    - search_pattern: The pattern to search for
+    - file_extensions: List of file extensions to search in (e.g., [".py", ".js"])
+    - case_sensitive: Whether the search is case sensitive (default: False)
+    - Returns: List of matches with file paths, line numbers, and language information
+    - Best for searching across specific file types or languages
+    - Example: file_type_search("function", [".js", ".ts"], case_sensitive=False)
+
+# FILE TOOLS
+
+6.  file_stats(path: str) - Get statistics about a file including line count, size, and other metadata.
     - path: Path to the file (can be imprecise, partial, or full path)
     - Returns: Dictionary with file statistics including full path, line count, size, etc.
     - Use this FIRST before reading a file to understand its size and structure
     - Example: file_stats("main.py") or file_stats("src/utils.js")
 
-2.  read_file(path: str, line_start: int = None, line_end: int = None) - Read contents of a specific file.
+7.  read_file(path: str, line_start: int = None, line_end: int = None) - Read contents of a specific file.
     - path: Path to the file (can be imprecise, partial, or full path)
     - line_start: Optional starting line number (1-based, inclusive)
     - line_end: Optional ending line number (1-based, inclusive)
@@ -59,90 +106,222 @@ Available tools:
     - For large files, first use file_stats to get the line count, then read in chunks of 100-200 lines
     - Example: read_file("main.py") or read_file("utils.js", 10, 20)
 
-3.  embed_search(query: str, max_results: int = 5) - Search the codebase using vector embeddings.
-    - query: The search query string (natural language or code)
-    - max_results: Maximum number of results to return (default: 5)
-    - Returns: List of results containing file paths and matching code snippets
-    - Best for concept-based queries and finding relevant code snippets
-    - Example: embed_search("user authentication") or embed_search("database connection", 10)
-
-4.  grep(search_pattern: str, file_pattern: str = None) - Search the codebase using regex patterns.
-    - search_pattern: The regex pattern to search for
-    - file_pattern: Optional filter for specific file types (e.g., "*.py", "*.js")
-    - Returns: List of matches with file paths and line numbers
-    - Best for exact text matches and finding specific strings
-    - Example: grep("def process_data", "*.py") or grep("useState\\(")
-
-5.  directory_tree(max_depth: int = None) - Generate/refresh the directory structure.
+8.  directory_tree(max_depth: int = None) - Generate/refresh the directory structure.
     - max_depth: Optional maximum depth to traverse (default: unlimited)
     - Returns: Dictionary with directory tree as string and statistics
     - Use to understand project structure or refresh the directory context
     - Example: directory_tree(3)
 
-6.  find_functions(pattern: str, file_pattern: str = None) - Find function definitions matching a pattern.
-    - pattern: Regex pattern to match function names
-    - file_pattern: Optional filter for specific file types
-    - Returns: List of function definitions with file paths and line numbers
-    - Example: find_functions("process_.*", "*.py")
-
-7.  find_classes(pattern: str, file_pattern: str = None) - Find class definitions matching a pattern.
-    - pattern: Regex pattern to match class names
-    - file_pattern: Optional filter for specific file types
-    - Returns: List of class definitions with file paths and line numbers
-    - Example: find_classes("User.*", "*.py")
-
-8.  git_history(path: str, max_commits: int = 10) - Get git history for a file or directory.
-    - path: Path to the file or directory
-    - max_commits: Maximum number of commits to return (default: 10)
-    - Returns: List of commits with author, date, and message
-    - Example: git_history("src/main.py", 5)
-
-9.  search_imports(module_name: str, file_pattern: str = None) - Find where modules are imported.
-    - module_name: Name of the module to search for
-    - file_pattern: Optional filter for specific file types
-    - Returns: List of import statements with file paths and line numbers
-    - Example: search_imports("os", "*.py")
-
-10. find_usage(symbol: str, file_pattern: str = None) - Find where a function, class, or variable is used.
-    - symbol: The symbol name to search for
-    - file_pattern: Optional filter for specific file types
-    - Returns: List of usages with file paths and line numbers
-    - Example: find_usage("process_data", "*.py")
-
-11. code_analysis(path: str) - Analyze code structure and dependencies.
-    - path: Path to the file to analyze
-    - Returns: Dictionary with code structure information
-    - Example: code_analysis("src/main.py")
-
-12. explain_code(path: str, line_start: int = None, line_end: int = None) - Generate an explanation of a code snippet.
-    - path: Path to the file
-    - line_start: Optional starting line number
-    - line_end: Optional ending line number
-    - Returns: Dictionary with code explanation
-    - Example: explain_code("src/main.py", 10, 20)
-
-13. get_project_description() - Get a description of the project.
-    - Returns: Dictionary with project description, structure, and other relevant information
-    - Use this to understand the overall project structure and purpose
-    - Example: get_project_description()
-
-14. ask_buddy(question: str) - Ask the buddy AI model for opinions or suggestions.
-    - question: The question or request to ask the buddy AI
-    - Returns: Dictionary with the buddy's response
-    - Use this when you need a second opinion or help with a specific problem
-    - Example: ask_buddy("What's the best way to implement authentication in this project?")
-
-15. get_file_description(file_path: str) - Get the description of a file from the descriptions directory.
+9.  get_file_description(file_path: str) - Get the description of a file from the descriptions directory.
     - file_path: Path to the file (can be imprecise, partial, or full path)
     - Returns: The description of the file, or an error message if not found
     - Use this to get a high-level description of a file's purpose and functionality
     - Example: get_file_description("src/auth.py")
 
-16. get_file_metadata(file_path: str) - Get the metadata of a file from the metadata directory.
+10. get_file_metadata(file_path: str) - Get the metadata of a file from the metadata directory.
     - file_path: Path to the file (can be imprecise, partial, or full path)
     - Returns: Dictionary with file metadata including name, path, hash, size, extension, modified time, description, and signatures
     - Use this to get detailed metadata about a file
     - Example: get_file_metadata("src/auth.py")
+
+# CODE ANALYSIS TOOLS
+
+11. find_functions(pattern: str, file_pattern: str = None) - Find function definitions matching a pattern.
+    - pattern: Regex pattern to match function names
+    - file_pattern: Optional filter for specific file types
+    - Returns: List of function definitions with file paths and line numbers
+    - Example: find_functions("process_.*", "*.py")
+
+12. find_classes(pattern: str, file_pattern: str = None) - Find class definitions matching a pattern.
+    - pattern: Regex pattern to match class names
+    - file_pattern: Optional filter for specific file types
+    - Returns: List of class definitions with file paths and line numbers
+    - Example: find_classes("User.*", "*.py")
+
+13. find_usage(symbol: str, file_pattern: str = None) - Find where a function, class, or variable is used.
+    - symbol: The symbol name to search for
+    - file_pattern: Optional filter for specific file types
+    - Returns: List of usages with file paths and line numbers
+    - Example: find_usage("process_data", "*.py")
+
+14. cross_reference(symbol: str, reference_type: str = "all", max_results: int = 20) - Find all references and definitions of a symbol across the codebase.
+    - symbol: The symbol name to cross-reference (function, class, variable)
+    - reference_type: Type of references to find - "all", "definition", "usage", "import", "inheritance" (default: "all")
+    - max_results: Maximum number of results to return (default: 20)
+    - Returns: Dictionary with definitions, usages, imports, inheritance relationships, and related symbols
+    - Best for comprehensive analysis of how a symbol is used throughout the codebase
+    - Example: cross_reference("UserAuth", "all", 30)
+
+15. code_analysis(path: str) - Analyze code structure and dependencies.
+    - path: Path to the file to analyze
+    - Returns: Dictionary with code structure information including imports, functions, classes, etc.
+    - Example: code_analysis("src/main.py")
+
+16. explain_code(path: str, line_start: int = None, line_end: int = None) - Generate an explanation of a code snippet.
+    - path: Path to the file
+    - line_start: Optional starting line number
+    - line_end: Optional ending line number
+    - Returns: Dictionary with code explanation in natural language
+    - Example: explain_code("src/main.py", 10, 20)
+
+17. get_functions(file_path: str) - Extract all function names from a specified file.
+    - file_path: Path to the file to analyze
+    - Returns: Dictionary with function information including signatures, line numbers, and docstrings
+    - Use this for detailed function analysis of a specific file
+    - Example: get_functions("src/utils.py")
+
+18. get_classes(file_path: str) - Extract all class definitions from a specified file.
+    - file_path: Path to the file to analyze
+    - Returns: Dictionary with class information including methods, attributes, and inheritance
+    - Use this for detailed class analysis of a specific file
+    - Example: get_classes("src/models.py")
+
+19. get_variables(file_path: str) - Extract global and class-level variables from a specified file.
+    - file_path: Path to the file to analyze
+    - Returns: Dictionary with variable information including types, values, and line numbers
+    - Use this for understanding data structures and configuration in a specific file
+    - Example: get_variables("src/config.py")
+
+20. get_imports(file_path: str) - Extract all import statements from a specified file.
+    - file_path: Path to the file to analyze
+    - Returns: Dictionary with import information including module names, aliases, and line numbers
+    - Use this for understanding dependencies of a specific file
+    - Example: get_imports("src/app.py")
+
+# VERSION CONTROL TOOLS
+
+21. git_history(path: str, max_commits: int = 10) - Get git history for a file or directory.
+    - path: Path to the file or directory
+    - max_commits: Maximum number of commits to return (default: 10)
+    - Returns: List of commits with author, date, and message
+    - Example: git_history("src/main.py", 5)
+
+22. version_control_search(search_pattern: str, search_type: str = "commit_message", max_results: int = 20) - Search across git commit history.
+    - search_pattern: The pattern to search for
+    - search_type: Type of search - "commit_message", "code_change", "file_path" (default: "commit_message")
+    - max_results: Maximum number of results to return (default: 20)
+    - Returns: Dictionary with search results from version control history
+    - Best for finding when and why code changes were made
+    - Example: version_control_search("authentication", "commit_message", 10)
+
+23. search_imports(module_name: str, file_pattern: str = None) - Find where modules are imported.
+    - module_name: Name of the module to search for
+    - file_pattern: Optional filter for specific file types
+    - Returns: List of import statements with file paths and line numbers
+    - Example: search_imports("os", "*.py")
+
+# PROJECT TOOLS
+
+24. get_project_description() - Get a description of the project.
+    - Returns: Dictionary with project description, structure, and other relevant information
+    - Use this to understand the overall project structure and purpose
+    - Example: get_project_description()
+
+25. get_instructions(section: str = None) - Get custom instructions from the instructions file.
+    - section: Optional section of instructions to get
+    - Returns: Dictionary with the loaded instructions, or an empty dict if not found
+    - Use this to retrieve custom instructions that the user has defined
+    - Example: get_instructions() or get_instructions("search")
+
+26. create_instructions_template() - Create a template instructions file.
+    - Returns: Dictionary with the template instructions
+    - Use this to create a template instructions file at the root of the project
+    - Example: create_instructions_template()
+
+# MEMORY TOOLS
+
+27. add_memory(content: str, category: str = None) - Add a new memory.
+    - content: The memory content
+    - category: Optional category of the memory
+    - Returns: Dictionary with the result of the operation
+    - Use this to add a new memory to the memory system
+    - Example: add_memory("The user prefers to use TypeScript for frontend development", "preferences")
+
+28. get_memories(category: str = None, limit: int = 10) - Get memories, optionally filtered by category.
+    - category: Optional category to filter by
+    - limit: Maximum number of memories to return (default: 10)
+    - Returns: Dictionary with the memories
+    - Use this to retrieve memories from the memory system
+    - Example: get_memories() or get_memories("preferences", 5)
+
+29. search_memories(query: str, limit: int = 5) - Search memories using semantic search.
+    - query: The search query
+    - limit: Maximum number of results to return (default: 5)
+    - Returns: Dictionary with the search results
+    - Use this to search memories in the memory system
+    - Example: search_memories("TypeScript preferences", 3)
+
+# SYSTEM TOOLS
+
+30. run_command(command: str, timeout_seconds: int = 30) - Execute a system command with configurable timeout.
+    - command: The command to execute
+    - timeout_seconds: The timeout in seconds (default: 30)
+    - Returns: Dictionary with command output and execution status
+    - Use this to run tests, scripts, or other system commands
+    - Note: When COMMANDS_YOLO=False, the user will be prompted to confirm before execution
+    - Example: run_command("ls -la")
+
+31. read_terminal(terminal_id: int, wait: bool = False, max_wait_seconds: int = 60) - Read output from a terminal session.
+    - terminal_id: The terminal ID
+    - wait: Whether to wait for the command to complete (default: False)
+    - max_wait_seconds: The maximum time to wait in seconds (default: 60)
+    - Returns: Dictionary with terminal output
+    - Use this to check the results of a command executed with run_command
+    - Example: read_terminal(1, True, 30)
+
+32. kill_terminal(terminal_id: int) - Terminate a running terminal process.
+    - terminal_id: The terminal ID
+    - Returns: Dictionary with kill operation result
+    - Use this to stop long-running commands
+    - Example: kill_terminal(1)
+
+33. list_terminals() - List all active terminal sessions.
+    - Returns: Dictionary with information about all active terminals
+    - Use this to manage multiple commands and see what's currently running
+    - Example: list_terminals()
+
+# HELPER TOOLS
+
+34. ask_buddy(question: str, context_file_path: str = None, include_project_info: bool = True) - Ask the buddy AI model for opinions or suggestions with relevant context.
+    - question: The question or request to ask the buddy AI
+    - context_file_path: (Optional) Path to a specific file to include as context - this provides the buddy AI with code from the file
+    - include_project_info: (Optional) Whether to include project information (default: True) - this provides the buddy AI with project overview
+    - Returns: Dictionary with the buddy's response, provider, model, and context information
+    - Use this when you need a second opinion or help with a specific problem
+    - The buddy AI will have access to the context you provide, making its responses more accurate and relevant
+    - Example: ask_buddy("What's the best way to implement authentication in this project?", "src/auth.py", True)
+
+# WEB TOOLS
+
+35. google_search(query: str, num_results: int = 5) - Perform a Google search and return the results.
+    - query: The query to search for
+    - num_results: Number of results to return (default: 5)
+    - Returns: Dictionary with search results
+    - Example: google_search("python async programming best practices")
+
+36. ddg_search(query: str, num_results: int = 5) - Search using DuckDuckGo.
+    - query: Search query
+    - num_results: Number of results to return (default: 5)
+    - Returns: Dictionary with search results
+    - Example: ddg_search("javascript promises vs async/await")
+
+37. bing_news_search(query: str, num_results: int = 5) - Search Bing News for recent articles.
+    - query: Search query
+    - num_results: Number of results to return (default: 5)
+    - Returns: Dictionary with news results
+    - Example: bing_news_search("latest AI developments")
+
+38. fetch_webpage(url: str, limit: int = 2000) - Fetch and extract text content from a webpage.
+    - url: The URL to fetch content from
+    - limit: Maximum number of characters to return (default: 2000)
+    - Returns: Dictionary with extracted text content
+    - Example: fetch_webpage("https://python.org/about")
+
+39. get_base_knowledge(user_location: str = "Unknown", user_time_zone: str = "America/New_York") - Get basic knowledge about current date, time, etc.
+    - user_location: The user's location (default: "Unknown")
+    - user_time_zone: The user's time zone (default: "America/New_York")
+    - Returns: Dictionary with basic knowledge including date, time, day of week
+    - Example: get_base_knowledge("New York", "America/New_York")
 
 When a tool needs to be called as part of a step, you MUST format the request for the tool within <tool_call_request> XML tags like this:
 <tool_call_request>
@@ -174,19 +353,42 @@ Consider which tools would be most effective for the user's query:
 1. file_stats - To get statistics about a file (use FIRST before reading a file to understand its size and structure)
 2. read_file - To read specific files (when you know which file to examine, use file_stats first for large files)
 3. embed_search - For semantic search across the codebase (best for concept-based queries)
-4. grep - For pattern-based search (best for exact text matches)
-5. directory_tree - To explore the directory structure (useful for understanding project organization)
-6. find_functions - To find function definitions (when looking for specific functionality)
-7. find_classes - To find class definitions (when looking for object-oriented structures)
-8. git_history - To check file history (useful for understanding changes over time)
-9. search_imports - To find where modules are imported (helpful for dependency analysis)
-10. find_usage - To find where symbols are used (good for understanding how components interact)
-11. code_analysis - To analyze code structure (provides detailed insights into a file's composition)
-12. explain_code - To get an explanation of code (useful for understanding complex snippets)
-13. get_project_description - To get an overview of the project (useful for understanding the project structure and purpose)
-14. ask_buddy - To get a second opinion from another AI model (useful when you need help with a specific problem)
-15. get_file_description - To get a high-level description of a file's purpose and functionality
-16. get_file_metadata - To get detailed metadata about a file
+4. semantic_search - For enhanced semantic search with better understanding of code concepts (best for understanding code functionality)
+5. grep - For pattern-based search (best for exact text matches)
+6. regex_advanced_search - For advanced regex search with more options (best for complex pattern matching with context)
+7. file_type_search - For searching specific file types or languages (best for focusing on particular languages)
+8. directory_tree - To explore the directory structure (useful for understanding project organization)
+9. find_functions - To find function definitions (when looking for specific functionality)
+10. find_classes - To find class definitions (when looking for object-oriented structures)
+11. find_usage - To find where symbols are used (good for understanding how components interact)
+12. cross_reference - To find all references and definitions of a symbol (best for comprehensive analysis of a symbol)
+13. git_history - To check file history (useful for understanding changes over time)
+14. version_control_search - To search across git commit history (best for finding when and why code changes were made)
+15. search_imports - To find where modules are imported (helpful for dependency analysis)
+16. code_analysis - To analyze code structure (provides detailed insights into a file's composition)
+17. explain_code - To get an explanation of code (useful for understanding complex snippets)
+18. get_project_description - To get an overview of the project (useful for understanding the project structure and purpose)
+19. ask_buddy - To get a second opinion from another AI model (useful when you need help with a specific problem)
+20. get_file_description - To get a high-level description of a file's purpose and functionality
+21. google_search - To search the web using Google (useful for finding external information)
+22. ddg_search - To search the web using DuckDuckGo (useful for finding external information)
+23. bing_news_search - To search for recent news articles (useful for finding current information)
+24. fetch_webpage - To extract text content from a webpage (useful for getting information from specific URLs)
+25. get_base_knowledge - To get current date, time, and timezone information (useful for time-sensitive tasks)
+26. get_file_metadata - To get detailed metadata about a file
+27. get_instructions - To get custom instructions from the instructions file (useful for understanding user preferences)
+28. create_instructions_template - To create a template instructions file (useful when the user wants to customize the AI's behavior)
+29. add_memory - To add a new memory to the memory system (useful for remembering important information for future interactions)
+30. get_memories - To get memories from the memory system (useful for recalling previously stored information)
+31. search_memories - To search memories using semantic search (useful for finding relevant memories based on a query)
+32. get_functions - To extract all function names from a specified file (useful for detailed function analysis)
+33. get_classes - To extract all class definitions from a specified file (useful for detailed class analysis)
+34. get_variables - To extract global and class-level variables from a specified file (useful for understanding data structures)
+35. get_imports - To extract all import statements from a specified file (useful for understanding dependencies)
+36. run_command - To execute a system command with configurable timeout (useful for running tests, scripts, or other commands)
+37. read_terminal - To read output from a terminal session (useful for checking command results)
+38. kill_terminal - To terminate a running terminal process (useful for stopping long-running commands)
+39. list_terminals - To list all active terminal sessions (useful for managing multiple commands)
 
 Choose the most appropriate tool(s) based on:
 - The specificity of the user's query
@@ -299,19 +501,42 @@ Remember that you have access to these tools:
 1. file_stats - To get statistics about a file (use FIRST before reading a file)
 2. read_file - To read specific files (use file_stats first for large files)
 3. embed_search - For semantic search across the codebase
-4. grep - For pattern-based search
-5. directory_tree - To explore the directory structure
-6. find_functions - To find function definitions
-7. find_classes - To find class definitions
-8. git_history - To check file history
-9. search_imports - To find where modules are imported
-10. find_usage - To find where symbols are used
-11. code_analysis - To analyze code structure
-12. explain_code - To get an explanation of code
-13. get_project_description - To get an overview of the project
-14. ask_buddy - To get a second opinion from another AI model
-15. get_file_description - To get a high-level description of a file's purpose and functionality
-16. get_file_metadata - To get detailed metadata about a file
+4. semantic_search - For enhanced semantic search with better understanding of code concepts
+5. grep - For pattern-based search
+6. regex_advanced_search - For advanced regex search with more options
+7. file_type_search - For searching specific file types or languages
+8. directory_tree - To explore the directory structure
+9. find_functions - To find function definitions
+10. find_classes - To find class definitions
+11. find_usage - To find where symbols are used
+12. cross_reference - To find all references and definitions of a symbol
+13. git_history - To check file history
+14. version_control_search - To search across git commit history
+15. search_imports - To find where modules are imported
+16. code_analysis - To analyze code structure
+17. explain_code - To get an explanation of code
+18. get_project_description - To get an overview of the project
+19. ask_buddy - To get a second opinion from another AI model
+20. get_file_description - To get a high-level description of a file's purpose and functionality
+21. get_file_metadata - To get detailed metadata about a file
+22. get_instructions - To get custom instructions from the instructions file
+23. create_instructions_template - To create a template instructions file
+24. add_memory - To add a new memory to the memory system
+25. get_memories - To get memories from the memory system
+26. search_memories - To search memories using semantic search
+27. get_functions - To extract all function names from a specified file
+28. get_classes - To extract all class definitions from a specified file
+29. get_variables - To extract global and class-level variables from a specified file
+30. get_imports - To extract all import statements from a specified file
+31. run_command - To execute a system command with configurable timeout
+32. read_terminal - To read output from a terminal session
+33. kill_terminal - To terminate a running terminal process
+34. list_terminals - To list all active terminal sessions
+35. google_search - To search the web using Google
+36. ddg_search - To search the web using DuckDuckGo
+37. bing_news_search - To search for recent news articles
+38. fetch_webpage - To extract text content from a webpage
+39. get_base_knowledge - To get current date, time, and timezone information
 
 Example if more info needed:
 <thinking>The search results show 'auth.py' is relevant. I should first get file stats to understand its size and structure before reading it.</thinking>
@@ -352,7 +577,45 @@ Example for asking the buddy AI:
 {{
   "name": "ask_buddy",
   "parameters": {{
-    "question": "What's the best way to implement a REST API in this project based on the code I've seen so far?"
+    "question": "What's the best way to implement a REST API in this project based on the code I've seen so far?",
+    "context_file_path": "src/api/routes.py",
+    "include_project_info": true
+  }}
+}}
+</tool_call_request>
+
+Example for using web search:
+<thinking>The user is asking about a technology that doesn't seem to be in the codebase. I'll search the web for information about it.</thinking>
+<tool_call_request>
+{{
+  "name": "google_search",
+  "parameters": {{
+    "query": "React Server Components best practices",
+    "num_results": 5
+  }}
+}}
+</tool_call_request>
+
+Example for fetching webpage content:
+<thinking>The search results mention a useful article. I'll fetch its content to get more detailed information.</thinking>
+<tool_call_request>
+{{
+  "name": "fetch_webpage",
+  "parameters": {{
+    "url": "https://react.dev/blog/2023/03/22/react-labs-what-we-have-been-working-on-march-2023",
+    "limit": 3000
+  }}
+}}
+</tool_call_request>
+
+Example for getting current date/time information:
+<thinking>The user is asking about time-sensitive information. I'll get the current date and time to provide an accurate response.</thinking>
+<tool_call_request>
+{{
+  "name": "get_base_knowledge",
+  "parameters": {{
+    "user_location": "New York",
+    "user_time_zone": "America/New_York"
   }}
 }}
 </tool_call_request>
@@ -495,11 +758,17 @@ These components work together to provide a secure authentication flow where tok
                 tool_call = json.loads(tool_json_str)
                 if 'name' in tool_call and 'parameters' in tool_call:
                     valid_tools = [
-                        'embed_search', 'grep', 'read_file', 'directory_tree',
-                        'find_functions', 'find_classes', 'git_history', 'search_imports',
-                        'find_usage', 'code_analysis', 'explain_code', 'file_stats',
+                        'embed_search', 'semantic_search', 'grep', 'regex_advanced_search',
+                        'file_type_search', 'read_file', 'directory_tree',
+                        'find_functions', 'find_classes', 'find_usage', 'cross_reference',
+                        'git_history', 'version_control_search', 'search_imports',
+                        'code_analysis', 'explain_code', 'file_stats',
                         'get_project_description', 'ask_buddy', 'get_file_description',
-                        'get_file_metadata'
+                        'get_file_metadata', 'get_instructions', 'create_instructions_template',
+                        'add_memory', 'get_memories', 'search_memories',
+                        'get_functions', 'get_classes', 'get_variables', 'get_imports',
+                        'run_command', 'read_terminal', 'kill_terminal', 'list_terminals',
+                        'google_search', 'ddg_search', 'bing_news_search', 'fetch_webpage', 'get_base_knowledge'
                     ]
                     if tool_call['name'] not in valid_tools:
                         self.logger.warning(f"Invalid tool name found: {tool_call['name']}")
@@ -567,6 +836,15 @@ These components work together to provide a secure authentication flow where tok
                 for item in result:
                     if "file_path" in item and not "error" in item:
                         self.known_files.add(item["file_path"])
+            elif tool_name == 'semantic_search':
+                query = parameters.get('query', '')
+                max_results = parameters.get('max_results', 5)
+                search_mode = parameters.get('search_mode', 'comprehensive')
+                result = self.tools.semantic_search(query, max_results, search_mode)
+
+                for item in result:
+                    if "file_path" in item and not "error" in item:
+                        self.known_files.add(item["file_path"])
             elif tool_name == 'grep':
                 search_pattern = parameters.get('search_pattern', '')
                 file_pattern = parameters.get('file_pattern')
@@ -574,6 +852,34 @@ These components work together to provide a secure authentication flow where tok
 
                 for item in result:
                     if "file_path" in item:
+                        self.known_files.add(item["file_path"])
+            elif tool_name == 'regex_advanced_search':
+                search_pattern = parameters.get('search_pattern', '')
+                file_pattern = parameters.get('file_pattern')
+                case_sensitive = parameters.get('case_sensitive', False)
+                whole_word = parameters.get('whole_word', False)
+                include_context = parameters.get('include_context', True)
+                context_lines = parameters.get('context_lines', 2)
+                max_results = parameters.get('max_results', 100)
+                result = self.tools.regex_advanced_search(
+                    search_pattern, file_pattern, case_sensitive, whole_word,
+                    include_context, context_lines, max_results
+                )
+
+                for item in result:
+                    if "file_path" in item and not "summary" in item:
+                        self.known_files.add(item["file_path"])
+            elif tool_name == 'file_type_search':
+                search_pattern = parameters.get('search_pattern', '')
+                file_extensions = parameters.get('file_extensions', [])
+                case_sensitive = parameters.get('case_sensitive', False)
+                max_results = parameters.get('max_results', 100)
+                result = self.tools.file_type_search(
+                    search_pattern, file_extensions, case_sensitive, max_results
+                )
+
+                for item in result:
+                    if "file_path" in item and not "summary" in item:
                         self.known_files.add(item["file_path"])
             elif tool_name == 'read_file':
                 path = parameters.get('path', '')
@@ -611,6 +917,22 @@ These components work together to provide a secure authentication flow where tok
 
                 if "path" in result and not "error" in result:
                     self.known_files.add(result["path"])
+            elif tool_name == 'version_control_search':
+                search_pattern = parameters.get('search_pattern', '')
+                search_type = parameters.get('search_type', 'commit_message')
+                max_results = parameters.get('max_results', 20)
+                author = parameters.get('author')
+                date_range = parameters.get('date_range')
+                result = self.tools.version_control_search(
+                    search_pattern, search_type, max_results, author, date_range
+                )
+
+                if search_type == "file_path" and "results" in result and isinstance(result["results"], list):
+                    for commit in result["results"]:
+                        if "matches" in commit and isinstance(commit["matches"], list):
+                            for match in commit["matches"]:
+                                if "file" in match:
+                                    self.known_files.add(match["file"])
             elif tool_name == 'search_imports':
                 module_name = parameters.get('module_name', '')
                 file_pattern = parameters.get('file_pattern')
@@ -627,6 +949,36 @@ These components work together to provide a secure authentication flow where tok
                 for item in result:
                     if "file_path" in item and not "error" in item:
                         self.known_files.add(item["file_path"])
+            elif tool_name == 'cross_reference':
+                symbol = parameters.get('symbol', '')
+                reference_type = parameters.get('reference_type', 'all')
+                max_results = parameters.get('max_results', 20)
+                result = self.tools.cross_reference(symbol, reference_type, max_results)
+
+                if "definitions" in result and isinstance(result["definitions"], list):
+                    for item in result["definitions"]:
+                        if "file_path" in item:
+                            self.known_files.add(item["file_path"])
+
+                if "usages" in result and isinstance(result["usages"], list):
+                    for item in result["usages"]:
+                        if "file_path" in item:
+                            self.known_files.add(item["file_path"])
+
+                if "imports" in result and isinstance(result["imports"], list):
+                    for item in result["imports"]:
+                        if "file_path" in item:
+                            self.known_files.add(item["file_path"])
+
+                if "inheritance" in result and isinstance(result["inheritance"], list):
+                    for item in result["inheritance"]:
+                        if "file_path" in item:
+                            self.known_files.add(item["file_path"])
+
+                if "related_symbols" in result and isinstance(result["related_symbols"], list):
+                    for item in result["related_symbols"]:
+                        if "file_path" in item:
+                            self.known_files.add(item["file_path"])
             elif tool_name == 'code_analysis':
                 path = parameters.get('path', '')
                 result = self.tools.code_analysis(path)
@@ -654,7 +1006,41 @@ These components work together to provide a secure authentication flow where tok
                 if not question:
                     result = {"error": "No question provided for ask_buddy tool"}
                 else:
-                    result = self.tools.ask_buddy(question)
+                    context_file_path = parameters.get('context_file_path')
+                    include_project_info = parameters.get('include_project_info', True)
+                    result = self.tools.ask_buddy(question, context_file_path, include_project_info)
+            elif tool_name == 'google_search':
+                query = parameters.get('query', '')
+                num_results = parameters.get('num_results', 5)
+                if not query:
+                    result = {"error": "No query provided for google_search tool"}
+                else:
+                    result = self.tools.google_search(query, num_results)
+            elif tool_name == 'ddg_search':
+                query = parameters.get('query', '')
+                num_results = parameters.get('num_results', 5)
+                if not query:
+                    result = {"error": "No query provided for ddg_search tool"}
+                else:
+                    result = self.tools.ddg_search(query, num_results)
+            elif tool_name == 'bing_news_search':
+                query = parameters.get('query', '')
+                num_results = parameters.get('num_results', 5)
+                if not query:
+                    result = {"error": "No query provided for bing_news_search tool"}
+                else:
+                    result = self.tools.bing_news_search(query, num_results)
+            elif tool_name == 'fetch_webpage':
+                url = parameters.get('url', '')
+                limit = parameters.get('limit', 2000)
+                if not url:
+                    result = {"error": "No URL provided for fetch_webpage tool"}
+                else:
+                    result = self.tools.fetch_webpage(url, limit)
+            elif tool_name == 'get_base_knowledge':
+                user_location = parameters.get('user_location', 'Unknown')
+                user_time_zone = parameters.get('user_time_zone', 'America/New_York')
+                result = self.tools.get_base_knowledge(user_location, user_time_zone)
             elif tool_name == 'get_file_description':
                 file_path = parameters.get('file_path', '')
                 if not file_path:
@@ -667,6 +1053,76 @@ These components work together to provide a secure authentication flow where tok
                     result = {"error": "No file_path provided for get_file_metadata tool"}
                 else:
                     result = self.tools.get_file_metadata(file_path)
+            elif tool_name == 'get_instructions':
+                section = parameters.get('section')
+                result = self.tools.get_instructions(section)
+            elif tool_name == 'create_instructions_template':
+                result = self.tools.create_instructions_template()
+            elif tool_name == 'add_memory':
+                content = parameters.get('content', '')
+                if not content:
+                    result = {"error": "No content provided for add_memory tool"}
+                else:
+                    category = parameters.get('category')
+                    result = self.tools.add_memory(content, category)
+            elif tool_name == 'get_memories':
+                category = parameters.get('category')
+                limit = parameters.get('limit', 10)
+                result = self.tools.get_memories(category, limit)
+            elif tool_name == 'search_memories':
+                query = parameters.get('query', '')
+                if not query:
+                    result = {"error": "No query provided for search_memories tool"}
+                else:
+                    limit = parameters.get('limit', 5)
+                    result = self.tools.search_memories(query, limit)
+            elif tool_name == 'get_functions':
+                file_path = parameters.get('file_path', '')
+                if not file_path:
+                    result = {"error": "No file_path provided for get_functions tool"}
+                else:
+                    result = self.tools.get_functions(file_path)
+            elif tool_name == 'get_classes':
+                file_path = parameters.get('file_path', '')
+                if not file_path:
+                    result = {"error": "No file_path provided for get_classes tool"}
+                else:
+                    result = self.tools.get_classes(file_path)
+            elif tool_name == 'get_variables':
+                file_path = parameters.get('file_path', '')
+                if not file_path:
+                    result = {"error": "No file_path provided for get_variables tool"}
+                else:
+                    result = self.tools.get_variables(file_path)
+            elif tool_name == 'get_imports':
+                file_path = parameters.get('file_path', '')
+                if not file_path:
+                    result = {"error": "No file_path provided for get_imports tool"}
+                else:
+                    result = self.tools.get_imports(file_path)
+            elif tool_name == 'run_command':
+                command = parameters.get('command', '')
+                if not command:
+                    result = {"error": "No command provided for run_command tool"}
+                else:
+                    timeout_seconds = parameters.get('timeout_seconds', 30)
+                    result = self.tools.run_command(command, timeout_seconds)
+            elif tool_name == 'read_terminal':
+                terminal_id = parameters.get('terminal_id')
+                if terminal_id is None:
+                    result = {"error": "No terminal_id provided for read_terminal tool"}
+                else:
+                    wait = parameters.get('wait', False)
+                    max_wait_seconds = parameters.get('max_wait_seconds', 60)
+                    result = self.tools.read_terminal(terminal_id, wait, max_wait_seconds)
+            elif tool_name == 'kill_terminal':
+                terminal_id = parameters.get('terminal_id')
+                if terminal_id is None:
+                    result = {"error": "No terminal_id provided for kill_terminal tool"}
+                else:
+                    result = self.tools.kill_terminal(terminal_id)
+            elif tool_name == 'list_terminals':
+                result = self.tools.list_terminals()
             else:
                 result = {"error": f"Unknown tool: {tool_name}"}
         except Exception as e:
@@ -966,6 +1422,7 @@ These components work together to provide a secure authentication flow where tok
 
             print(f"\n{Fore.YELLOW}{tool_display}{param_display}{Style.RESET_ALL}", end='')
 
+            import time
             animation_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
             animation_idx = 0
             execution_start = time.time()
@@ -1017,14 +1474,15 @@ These components work together to provide a secure authentication flow where tok
                     if isinstance(item_res, dict) and "file_path" in item_res and not "error" in item_res:
                         self.known_files.add(item_res["file_path"])
 
-            if (current_tool_call['name'] == 'embed_search' and isinstance(tool_result, list) and len(tool_result) == 0) or \
-               (current_tool_call['name'] == 'grep' and isinstance(tool_result, list) and len(tool_result) == 0):
+            if (current_tool_call['name'] in ['embed_search', 'semantic_search'] and isinstance(tool_result, list) and len(tool_result) == 0) or \
+               (current_tool_call['name'] in ['grep', 'regex_advanced_search', 'file_type_search'] and isinstance(tool_result, list) and len(tool_result) == 0):
                 self.logger.warning(f"No results found for {current_tool_call['name']}. Trying fallback strategy.")
 
                 fallback_tool = None
 
                 language_info = self.tools.get_project_languages()
                 file_patterns = []
+                file_extensions = []
 
                 if "error" not in language_info and language_info.get("languages"):
                     languages = language_info.get("languages", [])
@@ -1034,23 +1492,29 @@ These components work together to provide a secure authentication flow where tok
                         if lang in extensions and extensions[lang]:
                             for ext in extensions[lang]:
                                 file_patterns.append(f"*{ext}")
+                                file_extensions.append(ext)
 
                 if not file_patterns:
                     file_patterns = ["*.py", "*.js", "*.ts", "*.java", "*.c", "*.cpp", "*.cs", "*.go", "*.rb", "*.php"]
+                    file_extensions = [".py", ".js", ".ts", ".java", ".c", ".cpp", ".cs", ".go", ".rb", ".php"]
 
                 file_pattern_str = ",".join(file_patterns)
 
-                if current_tool_call['name'] == 'embed_search':
+                if current_tool_call['name'] in ['embed_search', 'semantic_search']:
                     search_query = current_tool_call['parameters'].get('query', '')
                     if search_query:
                         terms = [term for term in search_query.split() if len(term) > 3]
                         if terms:
                             pattern = '|'.join(terms)
                             fallback_tool = {
-                                'name': 'grep',
+                                'name': 'regex_advanced_search',
                                 'parameters': {
                                     'search_pattern': pattern,
-                                    'file_pattern': file_pattern_str
+                                    'file_pattern': file_pattern_str,
+                                    'case_sensitive': False,
+                                    'whole_word': False,
+                                    'include_context': True,
+                                    'context_lines': 2
                                 }
                             }
                 elif current_tool_call['name'] == 'grep':
@@ -1058,10 +1522,38 @@ These components work together to provide a secure authentication flow where tok
                     if search_pattern:
                         query = search_pattern.replace('|', ' ').replace('.*', ' ').replace('(', '').replace(')', '')
                         fallback_tool = {
+                            'name': 'semantic_search',
+                            'parameters': {
+                                'query': query,
+                                'max_results': 10,
+                                'search_mode': 'comprehensive'
+                            }
+                        }
+                elif current_tool_call['name'] == 'regex_advanced_search':
+                    search_pattern = current_tool_call['parameters'].get('search_pattern', '')
+                    if search_pattern:
+                        query = search_pattern.replace('|', ' ').replace('.*', ' ').replace('(', '').replace(')', '')
+                        fallback_tool = {
                             'name': 'embed_search',
                             'parameters': {
                                 'query': query,
-                                'max_results': 5
+                                'max_results': 10
+                            }
+                        }
+                elif current_tool_call['name'] == 'file_type_search':
+                    search_pattern = current_tool_call['parameters'].get('search_pattern', '')
+                    file_extensions = current_tool_call['parameters'].get('file_extensions', [])
+                    if search_pattern:
+                        query = search_pattern.replace('|', ' ').replace('.*', ' ').replace('(', '').replace(')', '')
+                        file_pattern = None
+                        if file_extensions:
+                            file_pattern = ",".join([f"*{ext}" for ext in file_extensions])
+
+                        fallback_tool = {
+                            'name': 'grep',
+                            'parameters': {
+                                'search_pattern': search_pattern,
+                                'file_pattern': file_pattern
                             }
                         }
 
@@ -1093,7 +1585,7 @@ These components work together to provide a secure authentication flow where tok
 
                     if isinstance(fallback_result, dict) and "file_path" in fallback_result and not "error" in fallback_result:
                         self.known_files.add(fallback_result["file_path"])
-                    elif fallback_tool['name'] in ['embed_search', 'grep'] and isinstance(fallback_result, list):
+                    elif fallback_tool['name'] in ['embed_search', 'semantic_search', 'grep', 'regex_advanced_search', 'file_type_search'] and isinstance(fallback_result, list):
                         for item_res in fallback_result:
                             if isinstance(item_res, dict) and "file_path" in item_res and not "error" in item_res:
                                 self.known_files.add(item_res["file_path"])
@@ -1159,9 +1651,201 @@ These components work together to provide a secure authentication flow where tok
                     if isinstance(tool_result, list):
                         result_summary = f"Found {len(tool_result)} results"
 
-                elif current_tool_call['name'] == 'embed_search':
+                elif current_tool_call['name'] in ['embed_search', 'semantic_search']:
                     if isinstance(tool_result, list):
                         result_summary = f"Found {len(tool_result)} semantic matches"
+
+                elif current_tool_call['name'] == 'regex_advanced_search':
+                    if isinstance(tool_result, list):
+                        file_counts = {}
+                        for item in tool_result:
+                            if "summary" in item:
+                                continue
+                            file_path = item.get("file_path", "unknown")
+                            file_counts[file_path] = file_counts.get(file_path, 0) + 1
+                        result_summary = f"Found {len(tool_result) - 1 if 'summary' in tool_result[0] else len(tool_result)} matches in {len(file_counts)} files"
+
+                elif current_tool_call['name'] == 'file_type_search':
+                    if isinstance(tool_result, list) and len(tool_result) > 0 and "summary" in tool_result[0]:
+                        summary = tool_result[0]["summary"]
+                        total_matches = summary.get("total_matches", 0)
+                        files_with_matches = summary.get("files_with_matches", 0)
+                        extensions_searched = summary.get("extensions_searched", [])
+                        result_summary = f"Found {total_matches} matches in {files_with_matches} files across {len(extensions_searched)} file types"
+                    elif isinstance(tool_result, list):
+                        result_summary = f"Found {len(tool_result)} matches"
+
+                elif current_tool_call['name'] == 'cross_reference':
+                    if isinstance(tool_result, dict):
+                        symbol = current_tool_call['parameters'].get('symbol', '')
+                        definitions_count = len(tool_result.get("definitions", []))
+                        usages_count = len(tool_result.get("usages", []))
+                        imports_count = len(tool_result.get("imports", []))
+                        inheritance_count = len(tool_result.get("inheritance", []))
+                        related_count = len(tool_result.get("related_symbols", []))
+
+                        result_summary = f"Cross-reference for '{symbol}': {definitions_count} definitions, {usages_count} usages"
+
+                        print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
+                        if imports_count > 0:
+                            print(f"{Fore.CYAN}  Imports: {imports_count}{Style.RESET_ALL}")
+                        if inheritance_count > 0:
+                            print(f"{Fore.CYAN}  Inheritance relationships: {inheritance_count}{Style.RESET_ALL}")
+                        if related_count > 0:
+                            print(f"{Fore.CYAN}  Related symbols: {related_count}{Style.RESET_ALL}")
+
+                        result_summary = ""
+
+                elif current_tool_call['name'] == 'version_control_search':
+                    if isinstance(tool_result, dict):
+                        search_pattern = current_tool_call['parameters'].get('search_pattern', '')
+                        search_type = current_tool_call['parameters'].get('search_type', 'commit_message')
+                        total_results = tool_result.get("total_results", 0)
+
+                        type_display = {
+                            "commit_message": "commit messages",
+                            "code_change": "code changes",
+                            "file_path": "file paths"
+                        }.get(search_type, search_type)
+
+                        result_summary = f"Found {total_results} matches in {type_display} for '{search_pattern}'"
+
+                elif current_tool_call['name'] == 'get_instructions':
+                    if isinstance(tool_result, dict):
+                        section = current_tool_call['parameters'].get('section')
+                        if "error" in tool_result:
+                            result_summary = f"Error getting instructions: {tool_result.get('error')}"
+                        elif "message" in tool_result and "No instructions file found" in tool_result.get("message", ""):
+                            result_summary = "No instructions file found"
+                        else:
+                            if section:
+                                result_summary = f"Retrieved instructions for section '{section}'"
+                            else:
+                                sections = tool_result.get("sections", [])
+                                result_summary = f"Retrieved all instructions with {len(sections)} sections"
+
+                elif current_tool_call['name'] == 'create_instructions_template':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error creating instructions template: {tool_result.get('error')}"
+                        elif "message" in tool_result:
+                            result_summary = tool_result.get("message")
+                        else:
+                            result_summary = "Created instructions template"
+
+                elif current_tool_call['name'] == 'add_memory':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error adding memory: {tool_result.get('error')}"
+                        else:
+                            category = tool_result.get("category", "general")
+                            result_summary = f"Memory added to category '{category}'"
+
+                elif current_tool_call['name'] == 'get_memories':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error getting memories: {tool_result.get('error')}"
+                        elif "message" in tool_result and "No memories found" in tool_result.get("message", ""):
+                            result_summary = tool_result.get("message")
+                        else:
+                            count = tool_result.get("count", 0)
+                            category = tool_result.get("category", "all")
+                            result_summary = f"Retrieved {count} memories from category '{category}'"
+
+                elif current_tool_call['name'] == 'search_memories':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error searching memories: {tool_result.get('error')}"
+                        elif "message" in tool_result and "No memories found" in tool_result.get("message", ""):
+                            result_summary = tool_result.get("message")
+                        else:
+                            count = tool_result.get("count", 0)
+                            query = tool_result.get("query", "")
+                            result_summary = f"Found {count} memories matching '{query}'"
+
+                elif current_tool_call['name'] == 'get_functions':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error getting functions: {tool_result.get('error')}"
+                        else:
+                            count = tool_result.get("count", 0)
+                            file_path = tool_result.get("file_path", "")
+                            result_summary = f"Found {count} functions in {file_path}"
+
+                elif current_tool_call['name'] == 'get_classes':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error getting classes: {tool_result.get('error')}"
+                        else:
+                            count = tool_result.get("count", 0)
+                            file_path = tool_result.get("file_path", "")
+                            result_summary = f"Found {count} classes in {file_path}"
+
+                elif current_tool_call['name'] == 'get_variables':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error getting variables: {tool_result.get('error')}"
+                        else:
+                            count = tool_result.get("count", 0)
+                            file_path = tool_result.get("file_path", "")
+                            result_summary = f"Found {count} variables in {file_path}"
+
+                elif current_tool_call['name'] == 'get_imports':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error getting imports: {tool_result.get('error')}"
+                        else:
+                            count = tool_result.get("count", 0)
+                            file_path = tool_result.get("file_path", "")
+                            result_summary = f"Found {count} imports in {file_path}"
+
+                elif current_tool_call['name'] == 'run_command':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error running command: {tool_result.get('error')}"
+                        elif "message" in tool_result:
+                            result_summary = tool_result.get("message")
+                        else:
+                            command = tool_result.get("command", "")
+                            exit_code = tool_result.get("exit_code")
+                            if exit_code is not None:
+                                result_summary = f"Command '{command}' completed with exit code {exit_code}"
+                            else:
+                                terminal_id = tool_result.get("terminal_id")
+                                result_summary = f"Command '{command}' running in terminal {terminal_id}"
+
+                elif current_tool_call['name'] == 'read_terminal':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error reading terminal: {tool_result.get('error')}"
+                        else:
+                            terminal_id = tool_result.get("terminal_id")
+                            is_running = tool_result.get("is_running", False)
+                            if is_running:
+                                result_summary = f"Read output from terminal {terminal_id} (still running)"
+                            else:
+                                exit_code = tool_result.get("exit_code")
+                                result_summary = f"Read output from terminal {terminal_id} (completed with exit code {exit_code})"
+
+                elif current_tool_call['name'] == 'kill_terminal':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error killing terminal: {tool_result.get('error')}"
+                        else:
+                            terminal_id = tool_result.get("terminal_id")
+                            success = tool_result.get("success", False)
+                            if success:
+                                result_summary = f"Successfully killed terminal {terminal_id}"
+                            else:
+                                result_summary = f"Failed to kill terminal {terminal_id}"
+
+                elif current_tool_call['name'] == 'list_terminals':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error listing terminals: {tool_result.get('error')}"
+                        else:
+                            count = tool_result.get("count", 0)
+                            result_summary = f"Found {count} active terminal sessions"
 
                 elif current_tool_call['name'] == 'file_stats':
                     if isinstance(tool_result, dict):
@@ -1201,11 +1885,49 @@ These components work together to provide a secure authentication flow where tok
                             response = tool_result.get("response", "")
                             provider = tool_result.get("provider", "unknown")
                             model = tool_result.get("model", "unknown")
+                            context_included = tool_result.get("context_included", False)
+                            context_file = tool_result.get("context_file")
 
                             if len(response) > 50:
                                 response_preview = response[:47] + "..."
                             else:
                                 response_preview = response
+
+                            context_info = ""
+                            if context_included:
+                                if context_file:
+                                    context_info = f" (with context from {context_file})"
+                                else:
+                                    context_info = " (with project context)"
+                            result_summary = f"Buddy ({provider}/{model}){context_info} responded: {response_preview}"
+                elif current_tool_call['name'] in ['google_search', 'ddg_search', 'bing_news_search']:
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error: {tool_result['error']}"
+                        else:
+                            query = tool_result.get("query", "")
+                            count = tool_result.get("count", 0)
+                            result_summary = f"Found {count} results for query: {query}"
+                elif current_tool_call['name'] == 'fetch_webpage':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error: {tool_result['error']}"
+                        else:
+                            url = tool_result.get("url", "")
+                            title = tool_result.get("title", "")
+                            truncated = tool_result.get("truncated", False)
+                            returned_length = tool_result.get("returned_length", 0)
+                            result_summary = f"Fetched {returned_length} chars from {url} - '{title}'{' (truncated)' if truncated else ''}"
+                elif current_tool_call['name'] == 'get_base_knowledge':
+                    if isinstance(tool_result, dict):
+                        if "error" in tool_result:
+                            result_summary = f"Error: {tool_result['error']}"
+                        else:
+                            date = tool_result.get("formatted_date", "")
+                            time = tool_result.get("formatted_time", "")
+                            day = tool_result.get("day_of_week", "")
+                            location = tool_result.get("user_location", "")
+                            result_summary = f"Current info: {day}, {date} {time} in {location}"
 
                 elif current_tool_call['name'] == 'get_file_description':
                     if isinstance(tool_result, dict):
@@ -1240,11 +1962,82 @@ These components work together to provide a secure authentication flow where tok
                         else:
                             response_preview = response
 
-                        result_summary = f"Buddy ({provider}/{model}) responded: {response_preview}"
+                        context_included = tool_result.get("context_included", False)
+                        context_file = tool_result.get("context_file")
+
+                        context_info = ""
+                        if context_included:
+                            if context_file:
+                                context_info = f" (with context from {context_file})"
+                            else:
+                                context_info = " (with project context)"
+
+                        result_summary = f"Buddy ({provider}/{model}){context_info} responded: {response_preview}"
 
                         print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
                         print(f"{Fore.CYAN}Buddy's full response:{Style.RESET_ALL}")
                         print(f"{Fore.WHITE}{response}{Style.RESET_ALL}")
+                        result_summary = ""
+
+                elif current_tool_call['name'] in ['google_search', 'ddg_search', 'bing_news_search']:
+                    if isinstance(tool_result, dict) and "results" in tool_result:
+                        query = tool_result.get("query", "")
+                        results = tool_result.get("results", [])
+                        count = tool_result.get("count", 0)
+
+                        result_summary = f"Found {count} results for query: {query}"
+
+                        print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Search results for: {query}{Style.RESET_ALL}")
+
+                        for i, result in enumerate(results, 1):
+                            if current_tool_call['name'] == 'google_search':
+                                print(f"{Fore.YELLOW}{i}. {result.get('title', 'No title')}{Style.RESET_ALL}")
+                                print(f"{Fore.BLUE}{result.get('url', 'No URL')}{Style.RESET_ALL}")
+                                print(f"{Fore.WHITE}{result.get('description', 'No description')}{Style.RESET_ALL}")
+                            else:
+                                print(f"{Fore.YELLOW}{i}.{Style.RESET_ALL}")
+                                for key, value in result.items():
+                                    print(f"{Fore.CYAN}{key.capitalize()}: {Style.RESET_ALL}{value}")
+                            print()
+
+                        result_summary = ""
+
+                elif current_tool_call['name'] == 'fetch_webpage':
+                    if isinstance(tool_result, dict) and "content" in tool_result:
+                        url = tool_result.get("url", "")
+                        title = tool_result.get("title", "")
+                        content = tool_result.get("content", "")
+                        truncated = tool_result.get("truncated", False)
+                        returned_length = tool_result.get("returned_length", 0)
+
+                        result_summary = f"Fetched {returned_length} chars from {url} - '{title}'{' (truncated)' if truncated else ''}"
+
+                        print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Title: {title}{Style.RESET_ALL}")
+                        print(f"{Fore.BLUE}URL: {url}{Style.RESET_ALL}")
+                        print(f"{Fore.YELLOW}Content preview (first 200 chars):{Style.RESET_ALL}")
+                        print(f"{Fore.WHITE}{content[:200]}...{Style.RESET_ALL}")
+
+                        result_summary = ""
+
+                elif current_tool_call['name'] == 'get_base_knowledge':
+                    if isinstance(tool_result, dict) and "todays_date" in tool_result:
+                        date = tool_result.get("formatted_date", "")
+                        time = tool_result.get("formatted_time", "")
+                        day = tool_result.get("day_of_week", "")
+                        location = tool_result.get("user_location", "")
+                        timezone = tool_result.get("user_time_zone", "")
+
+                        result_summary = f"Current info: {day}, {date} {time} in {location}"
+
+                        print(f"\r{Fore.GREEN}{tool_display}{param_display} ✓ {result_summary}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Date: {date}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Time: {time}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Day: {day}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Location: {location}{Style.RESET_ALL}")
+                        print(f"{Fore.CYAN}Timezone: {timezone}{Style.RESET_ALL}")
+
                         result_summary = ""
 
                 else:

@@ -326,7 +326,7 @@ class VerbalCodeAI:
             if not self.indexer or self.indexer.root_path != directory:
                 self.logger.info(f"Creating indexer for directory: {directory}")
                 self.indexer: FileIndexer = FileIndexer(directory)
-                
+
                 self.file_selector: FileSelector = FileSelector()
 
                 self.project_analyzer: ProjectAnalyzer = ProjectAnalyzer(self.indexer)
@@ -531,10 +531,17 @@ class VerbalCodeAI:
         print(Fore.CYAN + Style.BRIGHT + "Agent Mode" + Style.RESET_ALL)
         print(Fore.CYAN + "=" * 50 + Style.RESET_ALL)
         print(f"{Fore.YELLOW}In Agent Mode, the AI can use tools to explore and understand your codebase.")
-        print(f"{Fore.YELLOW}Available tools: embed_search, grep, read_file, directory_tree, find_functions, find_classes,")
-        print(f"{Fore.YELLOW}               git_history, search_imports, find_usage, code_analysis, explain_code,")
-        print(f"{Fore.YELLOW}               file_stats, get_project_description, ask_buddy, get_file_description,")
-        print(f"{Fore.YELLOW}               get_file_metadata")
+        print(f"{Fore.YELLOW}Available tools:")
+        print(f"{Fore.YELLOW}  Search tools: embed_search, semantic_search, grep, regex_advanced_search, file_type_search")
+        print(f"{Fore.YELLOW}  File tools: read_file, file_stats, directory_tree, get_file_description, get_file_metadata")
+        print(f"{Fore.YELLOW}  Code analysis: find_functions, find_classes, find_usage, cross_reference, code_analysis,")
+        print(f"{Fore.YELLOW}                 get_functions, get_classes, get_variables, get_imports, explain_code")
+        print(f"{Fore.YELLOW}  Version control: git_history, version_control_search, search_imports")
+        print(f"{Fore.YELLOW}  Project tools: get_project_description, get_instructions, create_instructions_template")
+        print(f"{Fore.YELLOW}  Memory tools: add_memory, get_memories, search_memories")
+        print(f"{Fore.YELLOW}  System tools: run_command, read_terminal, kill_terminal, list_terminals")
+        print(f"{Fore.YELLOW}  Helper tools: ask_buddy (with context-aware second opinions)")
+        print(f"{Fore.YELLOW}  Web tools: google_search, ddg_search, bing_news_search, fetch_webpage, get_base_knowledge")
         print(
             f"{Fore.YELLOW}Type your questions about the codebase. Type '{Fore.RED}exit{Fore.YELLOW}' to return to the main menu.{Style.RESET_ALL}"
         )

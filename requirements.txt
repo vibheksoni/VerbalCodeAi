@@ -14,3 +14,8 @@ tqdm>=4.66.1
 joblib>=1.3.2
 psutil>=5.9.5
 colorama
+pytz
+requests
+beautifulsoup4
+googlesearch-python
+duckduckgo-search
