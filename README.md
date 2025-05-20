@@ -9,12 +9,12 @@
 
 A powerful AI-powered code assistant that helps you understand, navigate, and work with codebases more efficiently. VerbalCodeAI uses advanced embedding techniques and LLM integration to provide intelligent code analysis and assistance directly in your terminal.
 
-```yaml                                             
-.       .      .          .    .--.        .           .         
- \     /       |          |   :            |          / \     o  
-  \   /.-. .--.|.-.  .-.  |   |    .-.  .-.| .-.     /___\    .  
-   \ /(.-' |   |   )(   ) |   :   (   )(   |(.-'    /     \   |  
-    '  `--''   '`-'  `-'`-`-   `--'`-'  `-'`-`--'  '       `-' `-'                                                                       
+```yaml
+.       .      .          .    .--.        .           .
+ \     /       |          |   :            |          / \     o
+  \   /.-. .--.|.-.  .-.  |   |    .-.  .-.| .-.     /___\    .
+   \ /(.-' |   |   )(   ) |   :   (   )(   |(.-'    /     \   |
+    '  `--''   '`-'  `-'`-`-   `--'`-'  `-'`-`--'  '       `-' `-'
                        [AI Assistant for Code]
 ```
 
@@ -167,6 +167,7 @@ COMMANDS_YOLO=FALSE
 - **Ollama**: Local models (default)
 - **Google AI**: Cloud-based models (requires API key)
 - **OpenAI**: OpenAI models (requires API key)
+- **Anthropic**: Claude models (requires API key)
 - **OpenRouter**: Various cloud models (requires API key)
 
 ### Performance Settings

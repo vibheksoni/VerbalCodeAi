@@ -6,6 +6,8 @@ with support for text generation, embeddings, and streaming responses.
 Supported providers:
 - Ollama (local models)
 - Google AI (cloud-based models)
+- OpenAI (OpenAI models)
+- Anthropic (Claude models)
 - OpenRouter (various cloud models)
 
 Features:
@@ -47,6 +49,9 @@ import requests
 from dotenv import load_dotenv
 from ollama import AsyncClient as OllamaAsyncClient
 
+import openai
+from anthropic import Anthropic, AsyncAnthropic
+
 logger = logging.getLogger("VerbalCodeAI.LLMs")
 
 load_dotenv()
@@ -57,6 +62,7 @@ AI_DESCRIPTION_PROVIDER: str = os.getenv("AI_DESCRIPTION_PROVIDER", "ollama")
 AI_CHAT_API_KEY: str = os.getenv("AI_CHAT_API_KEY")
 AI_EMBEDDING_API_KEY: str = os.getenv("AI_EMBEDDING_API_KEY")
 AI_DESCRIPTION_API_KEY: str = os.getenv("AI_DESCRIPTION_API_KEY")
+AI_ANTHROPIC_API_KEY: str = os.getenv("AI_ANTHROPIC_API_KEY")
 
 CHAT_MODEL: str = os.getenv("CHAT_MODEL")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
@@ -326,6 +332,8 @@ PERFORMANCE_METRICS: Dict[
     "provider_stats": {
         "ollama": {"requests": 0, "time": 0.0},
         "google": {"requests": 0, "time": 0.0},
+        "openai": {"requests": 0, "time": 0.0},
+        "anthropic": {"requests": 0, "time": 0.0},
         "openrouter": {"requests": 0, "time": 0.0},
     },
 }
@@ -344,6 +352,31 @@ if (AI_CHAT_PROVIDER == 'google' or
 
     if api_key:
         genai.configure(api_key=api_key)
+
+openai_client = None
+if (AI_CHAT_PROVIDER == 'openai' or
+        AI_EMBEDDING_PROVIDER == 'openai' or
+        AI_DESCRIPTION_PROVIDER == 'openai'):
+
+    api_key: Optional[str] = None
+    if AI_CHAT_PROVIDER == 'openai' and AI_CHAT_API_KEY and AI_CHAT_API_KEY.lower() != 'none':
+        api_key = AI_CHAT_API_KEY
+    elif AI_EMBEDDING_PROVIDER == 'openai' and AI_EMBEDDING_API_KEY and AI_EMBEDDING_API_KEY.lower() != 'none':
+        api_key = AI_EMBEDDING_API_KEY
+    elif AI_DESCRIPTION_PROVIDER == 'openai' and AI_DESCRIPTION_API_KEY and AI_DESCRIPTION_API_KEY.lower() != 'none':
+        api_key = AI_DESCRIPTION_API_KEY
+
+    if api_key:
+        openai_client = openai.OpenAI(api_key=api_key)
+        logger.debug("OpenAI client initialized")
+
+anthropic_client = None
+if AI_CHAT_PROVIDER == 'anthropic' or AI_DESCRIPTION_PROVIDER == 'anthropic':
+    if AI_ANTHROPIC_API_KEY and AI_ANTHROPIC_API_KEY.lower() != 'none':
+        anthropic_client = Anthropic(api_key=AI_ANTHROPIC_API_KEY)
+        logger.debug("Anthropic client initialized")
+    else:
+        logger.warning("AI_ANTHROPIC_API_KEY not set or invalid")
 PROMPT_TEMPLATES = {
     "code_description": """Analyze the following code and provide a concise description of its purpose and functionality.
 Focus on the main functionality, key components, and how they interact.
@@ -579,6 +612,36 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
                 except Exception as e:
                     logger.error(f"Google API error with model {EMBEDDING_MODEL}: {str(e)}")
                     embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+        elif AI_EMBEDDING_PROVIDER == "openai":
+            if is_small_batch:
+                logger.debug("Using OpenAI provider for embeddings")
+            if not openai_client:
+                logger.warning("OpenAI client not initialized for embeddings")
+                embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+            else:
+                try:
+                    if is_small_batch:
+                        logger.debug("Calling OpenAI API for embeddings")
+
+                    batch_size = 100
+                    all_embeddings = []
+
+                    for i in range(0, len(texts_to_process), batch_size):
+                        batch = texts_to_process[i:i+batch_size]
+                        response = openai_client.embeddings.create(
+                            model=EMBEDDING_MODEL,
+                            input=batch
+                        )
+                        batch_embeddings = [item.embedding for item in response.data]
+                        all_embeddings.extend(batch_embeddings)
+
+                    if is_small_batch:
+                        logger.debug("OpenAI API returned embeddings successfully")
+
+                    embeddings_for_misses = all_embeddings
+                except Exception as e:
+                    logger.error(f"OpenAI API error with model {EMBEDDING_MODEL}: {str(e)}")
+                    embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
         else:
             if is_small_batch:
                 logger.debug("Using Ollama provider for embeddings")
@@ -599,7 +662,7 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
                 response = ollama.embed(model=EMBEDDING_MODEL, input=texts_to_process)
                 if is_small_batch:
                     logger.debug("Ollama API returned embeddings successfully")
-                    
+
                 if hasattr(response, 'embeddings'):
                     embeddings_for_misses = []
                     for embedding in response.embeddings:
@@ -767,6 +830,14 @@ def generate_response(
         if chat_provider.lower() == "google":
             response = _generate_response_google(
                 messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
+            )
+        elif chat_provider.lower() == "openai":
+            response = _generate_response_openai(
+                messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
+            )
+        elif chat_provider.lower() == "anthropic":
+            response = _generate_response_anthropic(
+                messages, system_prompt, temperature, max_tokens, AI_ANTHROPIC_API_KEY, chat_model
             )
         elif chat_provider.lower() == "openrouter":
             try:
@@ -1000,6 +1071,134 @@ def _generate_response_google(
         raise Exception(f"Google API error with model {chat_model}: {str(e)}")
 
 
+@track_performance("openai")
+def _generate_response_openai(
+    messages: List[Dict[str, str]],
+    system_prompt: Optional[str] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+) -> str:
+    """Generate a response using OpenAI.
+
+    Args:
+        messages (List[Dict[str, str]]): Validated message list.
+        system_prompt (Optional[str], optional): System prompt. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to 0.7.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
+        model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
+
+    Returns:
+        str: Generated response.
+
+    Raises:
+        ValueError: If API key is not set or client is not initialized.
+        Exception: If API call fails.
+    """
+    global openai_client
+
+    chat_api_key = api_key or AI_CHAT_API_KEY
+    chat_model = model_name or CHAT_MODEL
+
+    if not chat_api_key or chat_api_key.lower() == "none":
+        raise ValueError("API key not set for OpenAI provider")
+
+    try:
+        if api_key or not openai_client:
+            openai_client = openai.OpenAI(api_key=chat_api_key)
+            logger.debug("OpenAI client initialized or reinitialized with provided API key")
+
+        formatted_messages = []
+
+        if system_prompt:
+            formatted_messages.append({"role": "system", "content": system_prompt})
+
+        for msg in messages:
+            formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        completion_params = {
+            "model": chat_model,
+            "messages": formatted_messages,
+            "temperature": temperature,
+        }
+
+        if max_tokens:
+            completion_params["max_tokens"] = max_tokens
+
+        response = openai_client.chat.completions.create(**completion_params)
+
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"OpenAI API error with model {chat_model}: {str(e)}", exc_info=True)
+        raise Exception(f"OpenAI API error with model {chat_model}: {str(e)}")
+
+
+@track_performance("anthropic")
+def _generate_response_anthropic(
+    messages: List[Dict[str, str]],
+    system_prompt: Optional[str] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+) -> str:
+    """Generate a response using Anthropic Claude.
+
+    Args:
+        messages (List[Dict[str, str]]): Validated message list.
+        system_prompt (Optional[str], optional): System prompt. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to 0.7.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
+        model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
+
+    Returns:
+        str: Generated response.
+
+    Raises:
+        ValueError: If API key is not set or client is not initialized.
+        Exception: If API call fails.
+    """
+    global anthropic_client
+
+    chat_api_key = api_key or AI_ANTHROPIC_API_KEY
+    chat_model = model_name or CHAT_MODEL
+
+    if not chat_api_key or chat_api_key.lower() == "none":
+        raise ValueError("API key not set for Anthropic provider")
+
+    try:
+        if api_key or not anthropic_client:
+            anthropic_client = Anthropic(api_key=chat_api_key)
+            logger.debug("Anthropic client initialized or reinitialized with provided API key")
+
+        formatted_messages = []
+
+        for msg in messages:
+            formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        completion_params = {
+            "model": chat_model,
+            "messages": formatted_messages,
+            "temperature": temperature,
+        }
+
+        if system_prompt:
+            completion_params["system"] = system_prompt
+
+        if max_tokens:
+            completion_params["max_tokens"] = max_tokens
+
+        response = anthropic_client.messages.create(**completion_params)
+
+        return response.content[0].text
+    except Exception as e:
+        logger.error(f"Anthropic API error with model {chat_model}: {str(e)}", exc_info=True)
+        raise Exception(f"Anthropic API error with model {chat_model}: {str(e)}")
+
+
 @track_performance("openrouter")
 def _generate_response_openrouter(
     messages: List[Dict[str, str]],
@@ -1182,6 +1381,7 @@ async def generate_response_stream(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
+    max_tokens: Optional[int] = None,
     use_memory: bool = True,
     add_to_memory: bool = True
 ) -> AsyncGenerator[str, None]:
@@ -1200,6 +1400,8 @@ async def generate_response_stream(
             Override the API key. Defaults to None (use environment variable).
         model (Optional[str], optional):
             Override the model name. Defaults to None (use environment variable).
+        max_tokens (Optional[int], optional):
+            Maximum tokens to generate. Defaults to None.
         use_memory (bool, optional):
             Whether to use conversation memory. Defaults to True.
         add_to_memory (bool, optional):
@@ -1290,6 +1492,87 @@ async def generate_response_stream(
 
             except Exception as e:
                 logger.error(f"Error generating response from Google API: {str(e)}")
+                yield f"Error generating response: {str(e)}"
+        elif chat_provider.lower() == "openai":
+            global openai_client
+
+            if not chat_api_key or chat_api_key.lower() == "none":
+                raise ValueError("API key not set for OpenAI provider")
+
+            try:
+                if api_key or not openai_client:
+                    openai_client = openai.OpenAI(api_key=chat_api_key)
+                    logger.debug("OpenAI client initialized or reinitialized with provided API key")
+
+                formatted_messages = []
+
+                if system_prompt:
+                    formatted_messages.append({"role": "system", "content": system_prompt})
+
+                for msg in messages:
+                    formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+                logger.info("Using streaming mode for OpenAI API")
+
+                completion_params = {
+                    "model": chat_model,
+                    "messages": formatted_messages,
+                    "temperature": 0.7,
+                    "stream": True
+                }
+
+                if max_tokens:
+                    completion_params["max_tokens"] = max_tokens
+
+                stream = openai_client.chat.completions.create(**completion_params)
+
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        chunk_text = chunk.choices[0].delta.content
+                        full_response.append(chunk_text)
+                        yield chunk_text
+
+            except Exception as e:
+                logger.error(f"Error generating response from OpenAI API: {str(e)}")
+                yield f"Error generating response: {str(e)}"
+        elif chat_provider.lower() == "anthropic":
+            global anthropic_client
+
+            if not AI_ANTHROPIC_API_KEY or AI_ANTHROPIC_API_KEY.lower() == "none":
+                raise ValueError("API key not set for Anthropic provider")
+
+            try:
+                if api_key or not anthropic_client:
+                    anthropic_client = Anthropic(api_key=AI_ANTHROPIC_API_KEY)
+                    logger.debug("Anthropic client initialized or reinitialized with provided API key")
+
+                formatted_messages = []
+
+                for msg in messages:
+                    formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+                logger.info("Using streaming mode for Anthropic API")
+
+                completion_params = {
+                    "model": chat_model,
+                    "messages": formatted_messages,
+                    "temperature": 0.7,
+                    "stream": True
+                }
+
+                if system_prompt:
+                    completion_params["system"] = system_prompt
+
+                if max_tokens:
+                    completion_params["max_tokens"] = max_tokens
+
+                with anthropic_client.messages.stream(**completion_params) as stream:
+                    for text in stream.text_stream:
+                        full_response.append(text)
+                        yield text
+
+            except Exception as e:
+                logger.error(f"Error generating response from Anthropic API: {str(e)}")
                 yield f"Error generating response: {str(e)}"
         elif chat_provider.lower() == "openrouter":
             if not chat_api_key or chat_api_key.lower() == "none":
@@ -1511,6 +1794,10 @@ def generate_description(
     try:
         if AI_DESCRIPTION_PROVIDER == "google":
             response = _generate_description_google(prompt, temperature, max_tokens)
+        elif AI_DESCRIPTION_PROVIDER == "openai":
+            response = _generate_description_openai(prompt, temperature, max_tokens)
+        elif AI_DESCRIPTION_PROVIDER == "anthropic":
+            response = _generate_description_anthropic(prompt, temperature, max_tokens)
         elif AI_DESCRIPTION_PROVIDER == "openrouter":
             try:
                 response = _generate_description_openrouter(prompt, temperature, max_tokens)
@@ -1693,6 +1980,102 @@ def _generate_description_google(
         raise Exception(f"Google API error with model {DESCRIPTION_MODEL}: {str(e)}")
 
 
+@track_performance("openai")
+def _generate_description_openai(
+    prompt: str,
+    temperature: float = 0.3,
+    max_tokens: Optional[int] = None,
+) -> str:
+    """Generate a description using OpenAI.
+
+    Args:
+        prompt (str): The prompt text.
+        temperature (float): Temperature. Defaults to 0.3.
+        max_tokens (Optional[int]): Max tokens. Defaults to None.
+
+    Returns:
+        str: Generated description.
+
+    Raises:
+        ValueError: If API key is not set or client is not initialized.
+        Exception: If API call fails.
+    """
+    global openai_client
+
+    if not AI_DESCRIPTION_API_KEY or AI_DESCRIPTION_API_KEY.lower() == "none":
+        raise ValueError("AI_DESCRIPTION_API_KEY not set for OpenAI provider")
+
+    try:
+        if not openai_client:
+            openai_client = openai.OpenAI(api_key=AI_DESCRIPTION_API_KEY)
+            logger.debug("OpenAI client initialized for description generation")
+
+        formatted_messages = [{"role": "user", "content": prompt}]
+
+        completion_params = {
+            "model": DESCRIPTION_MODEL,
+            "messages": formatted_messages,
+            "temperature": temperature,
+        }
+
+        if max_tokens:
+            completion_params["max_tokens"] = max_tokens
+
+        response = openai_client.chat.completions.create(**completion_params)
+
+        return response.choices[0].message.content
+    except Exception as e:
+        raise Exception(f"OpenAI API error with model {DESCRIPTION_MODEL}: {str(e)}")
+
+
+@track_performance("anthropic")
+def _generate_description_anthropic(
+    prompt: str,
+    temperature: float = 0.3,
+    max_tokens: Optional[int] = None,
+) -> str:
+    """Generate a description using Anthropic Claude.
+
+    Args:
+        prompt (str): The prompt text.
+        temperature (float): Temperature. Defaults to 0.3.
+        max_tokens (Optional[int]): Max tokens. Defaults to None.
+
+    Returns:
+        str: Generated description.
+
+    Raises:
+        ValueError: If API key is not set or client is not initialized.
+        Exception: If API call fails.
+    """
+    global anthropic_client
+
+    if not AI_ANTHROPIC_API_KEY or AI_ANTHROPIC_API_KEY.lower() == "none":
+        raise ValueError("AI_ANTHROPIC_API_KEY not set for Anthropic provider")
+
+    try:
+        if not anthropic_client:
+            anthropic_client = Anthropic(api_key=AI_ANTHROPIC_API_KEY)
+            logger.debug("Anthropic client initialized for description generation")
+
+        formatted_messages = [{"role": "user", "content": prompt}]
+
+        completion_params = {
+            "model": DESCRIPTION_MODEL,
+            "messages": formatted_messages,
+            "temperature": temperature,
+        }
+
+        if max_tokens:
+            completion_params["max_tokens"] = max_tokens
+
+        response = anthropic_client.messages.create(**completion_params)
+
+        return response.content[0].text
+    except Exception as e:
+        raise Exception(f"Anthropic API error with model {DESCRIPTION_MODEL}: {str(e)}")
+
+
 @track_performance("ollama")
 def _generate_description_ollama(
     prompt: str,
@@ -1771,6 +2154,8 @@ def reset_performance_metrics() -> None:
         "provider_stats": {
             "ollama": {"requests": 0, "time": 0.0},
             "google": {"requests": 0, "time": 0.0},
+            "openai": {"requests": 0, "time": 0.0},
+            "anthropic": {"requests": 0, "time": 0.0},
             "openrouter": {"requests": 0, "time": 0.0},
         },
     }
