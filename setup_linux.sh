@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Check if we're running in a terminal that supports colors
 if [ -t 1 ]; then
@@ -56,7 +56,7 @@ if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 11 ]); then
     echo "You may encounter issues with older versions."
     echo ""
     read -p "Do you want to continue anyway? (y/n): " CONTINUE
-    if [[ $CONTINUE != "y" && $CONTINUE != "Y" ]]; then
+    if [ "$CONTINUE" != "y" ] && [ "$CONTINUE" != "Y" ]; then
         exit 1
     fi
 fi
@@ -80,12 +80,18 @@ fi
 # Activate virtual environment
 echo ""
 printf "${YELLOW}[STEP 2] Activating virtual environment...${NC}\n"
-source venv/bin/activate
-if [ $? -ne 0 ]; then
-    printf "${RED}[ERROR] Failed to activate virtual environment.${NC}\n"
+if [ -f "venv/bin/activate" ]; then
+    # Use . instead of source for better compatibility
+    . venv/bin/activate
+    if [ $? -ne 0 ]; then
+        printf "${RED}[ERROR] Failed to activate virtual environment.${NC}\n"
+        exit 1
+    fi
+    printf "${GREEN}[SUCCESS] Virtual environment activated.${NC}\n"
+else
+    printf "${RED}[ERROR] Virtual environment activation script not found.${NC}\n"
     exit 1
 fi
-printf "${GREEN}[SUCCESS] Virtual environment activated.${NC}\n"
 
 # Upgrade pip
 echo ""
@@ -114,7 +120,7 @@ if ! command -v ollama &> /dev/null; then
     echo "Installation instructions: https://ollama.com/download"
     echo ""
     read -p "Would you like to install Ollama now? (y/n): " INSTALL_OLLAMA
-    if [[ $INSTALL_OLLAMA == "y" || $INSTALL_OLLAMA == "Y" ]]; then
+    if [ "$INSTALL_OLLAMA" = "y" ] || [ "$INSTALL_OLLAMA" = "Y" ]; then
         echo "Installing Ollama..."
         curl -fsSL https://ollama.com/install.sh | sh
         if [ $? -ne 0 ]; then
@@ -206,7 +212,7 @@ echo ""
 
 # Offer to run the application
 read -p "Would you like to run VerbalCodeAI now? (y/n): " RUN_APP
-if [[ $RUN_APP == "y" || $RUN_APP == "Y" ]]; then
+if [ "$RUN_APP" = "y" ] || [ "$RUN_APP" = "Y" ]; then
     echo ""
     echo "Starting VerbalCodeAI..."
     python app.py
