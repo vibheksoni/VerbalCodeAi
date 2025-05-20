@@ -130,7 +130,7 @@ Agent Mode provides access to powerful tools:
 VerbalCodeAI can be configured through the `.env` file:
 
 ```
-# Provider can be: ollama, google, openai, or openrouter
+# Provider can be: ollama, google, openai, anthropic, or openrouter
 AI_CHAT_PROVIDER=ollama
 AI_EMBEDDING_PROVIDER=ollama
 AI_DESCRIPTION_PROVIDER=ollama
@@ -139,12 +139,14 @@ AI_DESCRIPTION_PROVIDER=ollama
 AI_CHAT_API_KEY=None
 AI_EMBEDDING_API_KEY=None
 AI_DESCRIPTION_API_KEY=None
+AI_ANTHROPIC_API_KEY=None
 
 # Model names for each provider
 # For ollama: llama2, codellama, mistral, etc.
-# For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002
+# For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002 (embedding)
 # For OpenRouter: anthropic/claude-3-opus, openai/gpt-4-turbo, google/gemini-pro, etc.
 # For Google: gemini-pro, gemini-pro-vision
+# For Anthropic: claude-3-5-sonnet-latest, claude-3-opus-20240229, claude-3-haiku-20240307
 CHAT_MODEL=llama2
 EMBEDDING_MODEL=all-minilm:33m
 DESCRIPTION_MODEL=llama2
@@ -166,9 +168,18 @@ COMMANDS_YOLO=FALSE
 
 - **Ollama**: Local models (default)
 - **Google AI**: Cloud-based models (requires API key)
-- **OpenAI**: OpenAI models (requires API key)
-- **Anthropic**: Claude models (requires API key)
+- **OpenAI**: OpenAI models for both chat and embeddings (requires API key)
+- **Anthropic**: Claude models for chat with streaming support (requires API key)
 - **OpenRouter**: Various cloud models (requires API key)
+
+#### Anthropic Claude Models
+
+Anthropic's Claude models are particularly strong at understanding and generating code. Available models include:
+- **claude-3-5-sonnet-latest**: Latest version of Claude 3.5 Sonnet, excellent balance of performance and speed
+- **claude-3-opus-20240229**: Most powerful Claude model with advanced reasoning capabilities
+- **claude-3-haiku-20240307**: Fastest and most cost-effective Claude model
+
+Note: Anthropic does not provide embedding capabilities, so you'll need to use a different provider for embeddings.
 
 ### Performance Settings
 
