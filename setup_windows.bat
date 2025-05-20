@@ -27,7 +27,10 @@ if %errorlevel% neq 0 (
 for /f "tokens=2" %%V in ('python --version 2^>^&1') do set PYTHON_VERSION=%%V
 echo [INFO] Detected Python version: %PYTHON_VERSION%
 
-:: Verify Python version is 3.11.6 or later
+:: Extract version components
+set MAJOR=0
+set MINOR=0
+set PATCH=0
 for /f "tokens=1,2,3 delims=." %%a in ("%PYTHON_VERSION%") do (
     set MAJOR=%%a
     set MINOR=%%b
@@ -39,8 +42,8 @@ if %MAJOR% LSS 3 (
     echo This application was tested with Python 3.11.6.
     echo You may encounter issues with older versions.
     echo.
-    set /p CONTINUE=Do you want to continue anyway? (Y/N):
-    if /i "!CONTINUE!" NEQ "Y" exit /b 1
+    set /p CONTINUE="Do you want to continue anyway? (Y/N): "
+    if /i "%CONTINUE%" NEQ "Y" exit /b 1
 ) else (
     if %MAJOR% EQU 3 (
         if %MINOR% LSS 11 (
@@ -48,8 +51,8 @@ if %MAJOR% LSS 3 (
             echo This application was tested with Python 3.11.6.
             echo You may encounter issues with older versions.
             echo.
-            set /p CONTINUE=Do you want to continue anyway? (Y/N):
-            if /i "!CONTINUE!" NEQ "Y" exit /b 1
+            set /p CONTINUE="Do you want to continue anyway? (Y/N): "
+            if /i "%CONTINUE%" NEQ "Y" exit /b 1
         )
     )
 )
@@ -106,8 +109,8 @@ if %errorlevel% neq 0 (
     echo Download from: https://ollama.com/download
     echo.
     echo Would you like to open the Ollama download page? (Y/N)
-    set /p OPEN_OLLAMA=
-    if /i "!OPEN_OLLAMA!"=="Y" (
+    set /p OPEN_OLLAMA="Enter your choice (Y/N): "
+    if /i "%OPEN_OLLAMA%"=="Y" (
         start https://ollama.com/download
     )
 ) else (
@@ -189,7 +192,7 @@ echo.
 
 :: Offer to run the application
 echo Would you like to run VerbalCodeAI now? (Y/N)
-set /p RUN_APP=
+set /p RUN_APP="Enter your choice (Y/N): "
 if /i "%RUN_APP%"=="Y" (
     echo.
     echo Starting VerbalCodeAI...
