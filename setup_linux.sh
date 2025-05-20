@@ -1,14 +1,25 @@
 #!/bin/bash
 
-# ANSI color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# Check if we're running in a terminal that supports colors
+if [ -t 1 ]; then
+    # ANSI color codes
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    CYAN='\033[0;36m'
+    NC='\033[0m' # No Color
+else
+    # No colors if not in a terminal
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    CYAN=''
+    NC=''
+fi
 
-echo -e "${CYAN}"
+printf "${CYAN}"
 echo "========================================================"
 echo " _    __          __          __   ______          __        ___    _"
 echo "| |  / /__  _____/ /_  ____ _/ /  / ____/___  ____/ /__     /   |  (_)"
@@ -19,11 +30,12 @@ echo ""
 echo "========================================================"
 echo "Linux Setup Script for VerbalCodeAI"
 echo "========================================================"
-echo -e "${NC}"
+printf "${NC}"
 
 # Check if Python is installed
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}[ERROR] Python 3 is not installed.${NC}"
+python3 --version &> /dev/null
+if [ $? -ne 0 ]; then
+    printf "${RED}[ERROR] Python 3 is not installed.${NC}\n"
     echo "Please install Python 3.11.6 or later using your package manager."
     echo "For example: sudo apt install python3 python3-pip python3-venv"
     exit 1
@@ -31,7 +43,7 @@ fi
 
 # Check Python version
 PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
-echo -e "${BLUE}[INFO] Detected Python version: ${PYTHON_VERSION}${NC}"
+printf "${BLUE}[INFO] Detected Python version: ${PYTHON_VERSION}${NC}\n"
 
 # Verify Python version is 3.11.6 or later
 MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
@@ -39,7 +51,7 @@ MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
 PATCH=$(echo $PYTHON_VERSION | cut -d. -f3)
 
 if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 11 ]); then
-    echo -e "${YELLOW}[WARNING] Python version $PYTHON_VERSION may be too old.${NC}"
+    printf "${YELLOW}[WARNING] Python version $PYTHON_VERSION may be too old.${NC}\n"
     echo "This application was tested with Python 3.11.6."
     echo "You may encounter issues with older versions."
     echo ""
@@ -51,53 +63,53 @@ fi
 
 # Create virtual environment
 echo ""
-echo -e "${YELLOW}[STEP 1] Creating virtual environment...${NC}"
+printf "${YELLOW}[STEP 1] Creating virtual environment...${NC}\n"
 if [ -d "venv" ]; then
-    echo -e "${BLUE}[INFO] Virtual environment already exists. Skipping creation.${NC}"
+    printf "${BLUE}[INFO] Virtual environment already exists. Skipping creation.${NC}\n"
 else
     python3 -m venv venv
     if [ $? -ne 0 ]; then
-        echo -e "${RED}[ERROR] Failed to create virtual environment.${NC}"
+        printf "${RED}[ERROR] Failed to create virtual environment.${NC}\n"
         echo "Make sure python3-venv is installed."
         echo "For example: sudo apt install python3-venv"
         exit 1
     fi
-    echo -e "${GREEN}[SUCCESS] Virtual environment created.${NC}"
+    printf "${GREEN}[SUCCESS] Virtual environment created.${NC}\n"
 fi
 
 # Activate virtual environment
 echo ""
-echo -e "${YELLOW}[STEP 2] Activating virtual environment...${NC}"
+printf "${YELLOW}[STEP 2] Activating virtual environment...${NC}\n"
 source venv/bin/activate
 if [ $? -ne 0 ]; then
-    echo -e "${RED}[ERROR] Failed to activate virtual environment.${NC}"
+    printf "${RED}[ERROR] Failed to activate virtual environment.${NC}\n"
     exit 1
 fi
-echo -e "${GREEN}[SUCCESS] Virtual environment activated.${NC}"
+printf "${GREEN}[SUCCESS] Virtual environment activated.${NC}\n"
 
 # Upgrade pip
 echo ""
-echo -e "${YELLOW}[STEP 3] Upgrading pip...${NC}"
+printf "${YELLOW}[STEP 3] Upgrading pip...${NC}\n"
 python -m pip install --upgrade pip
 if [ $? -ne 0 ]; then
-    echo -e "${YELLOW}[WARNING] Failed to upgrade pip, but continuing with installation.${NC}"
+    printf "${YELLOW}[WARNING] Failed to upgrade pip, but continuing with installation.${NC}\n"
 fi
 
 # Install dependencies
 echo ""
-echo -e "${YELLOW}[STEP 4] Installing dependencies...${NC}"
+printf "${YELLOW}[STEP 4] Installing dependencies...${NC}\n"
 pip install -r requirements.txt
 if [ $? -ne 0 ]; then
-    echo -e "${RED}[ERROR] Failed to install dependencies.${NC}"
+    printf "${RED}[ERROR] Failed to install dependencies.${NC}\n"
     exit 1
 fi
-echo -e "${GREEN}[SUCCESS] Dependencies installed.${NC}"
+printf "${GREEN}[SUCCESS] Dependencies installed.${NC}\n"
 
 # Check if Ollama is installed
 echo ""
-echo -e "${YELLOW}[STEP 5] Checking for Ollama...${NC}"
+printf "${YELLOW}[STEP 5] Checking for Ollama...${NC}\n"
 if ! command -v ollama &> /dev/null; then
-    echo -e "${YELLOW}[WARNING] Ollama is not installed or not in PATH.${NC}"
+    printf "${YELLOW}[WARNING] Ollama is not installed or not in PATH.${NC}\n"
     echo "You will need to install Ollama to use local models."
     echo "Installation instructions: https://ollama.com/download"
     echo ""
@@ -106,21 +118,21 @@ if ! command -v ollama &> /dev/null; then
         echo "Installing Ollama..."
         curl -fsSL https://ollama.com/install.sh | sh
         if [ $? -ne 0 ]; then
-            echo -e "${YELLOW}[WARNING] Failed to install Ollama automatically.${NC}"
+            printf "${YELLOW}[WARNING] Failed to install Ollama automatically.${NC}\n"
             echo "Please install manually from: https://ollama.com/download"
         else
-            echo -e "${GREEN}[SUCCESS] Ollama installed.${NC}"
+            printf "${GREEN}[SUCCESS] Ollama installed.${NC}\n"
         fi
     fi
 else
-    echo -e "${GREEN}[SUCCESS] Ollama is installed.${NC}"
+    printf "${GREEN}[SUCCESS] Ollama is installed.${NC}\n"
 fi
 
 # Create .env file if it doesn't exist
 echo ""
-echo -e "${YELLOW}[STEP 6] Setting up environment variables...${NC}"
+printf "${YELLOW}[STEP 6] Setting up environment variables...${NC}\n"
 if [ ! -f ".env" ]; then
-    echo -e "${BLUE}[INFO] Creating .env file with default settings...${NC}"
+    printf "${BLUE}[INFO] Creating .env file with default settings...${NC}\n"
     cat > .env << EOL
 # Provider can be: ollama, google, openai, or openrouter
 AI_CHAT_PROVIDER=ollama
@@ -172,16 +184,16 @@ MAX_MEMORY_ITEMS=10
 # When TRUE, commands will execute automatically without confirmation
 COMMANDS_YOLO=FALSE
 EOL
-    echo -e "${GREEN}[SUCCESS] Created .env file with default settings.${NC}"
+    printf "${GREEN}[SUCCESS] Created .env file with default settings.${NC}\n"
 else
-    echo -e "${BLUE}[INFO] .env file already exists. Skipping creation.${NC}"
+    printf "${BLUE}[INFO] .env file already exists. Skipping creation.${NC}\n"
 fi
 
 # Make the app.py executable
 chmod +x app.py
 
 echo ""
-echo -e "${CYAN}========================================================"
+printf "${CYAN}========================================================\n"
 echo "VerbalCodeAI setup completed successfully!"
 echo ""
 echo "To start the application, run:"
@@ -189,7 +201,7 @@ echo "  source venv/bin/activate"
 echo "  python app.py"
 echo ""
 echo "For more information, see the README.md file."
-echo "========================================================${NC}"
+printf "========================================================${NC}\n"
 echo ""
 
 # Offer to run the application
