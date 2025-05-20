@@ -185,6 +185,37 @@ COMMANDS_YOLO=FALSE
 - **MAX_MEMORY_ITEMS**: Maximum number of memory items to store
 - **COMMANDS_YOLO**: When FALSE, prompts for confirmation before executing commands
 
+
+
+## 📺 Video Showcase
+
+Check out a quick video demonstration of VerbalCodeAI in action:
+
+<p align="center">
+  <a href="https://youtu.be/5EnenUD-4E4?si=WIw-C4ne4JCP5dfZ" target="_blank">
+    <img src="https://img.youtube.com/vi/5EnenUD-4E4/hqdefault.jpg" alt="VerbalCodeAI Video Showcase" width="480"/>
+  </a>
+</p>
+
+Or watch directly on [YouTube](https://youtu.be/5EnenUD-4E4?si=WIw-C4ne4JCP5dfZ).
+
+---
+
+## 🖼️ Image Showcase
+
+Below are some screenshots and showcase images of VerbalCodeAI in action:
+
+<div align="center">
+  <img src="Showcase/Agent%20Mode%20New%20commands.PNG" alt="Agent Mode New commands" width="350" style="margin: 10px;"/>
+  <img src="Showcase/Agent%20Showcase.png" alt="Agent Showcase" width="350" style="margin: 10px;"/>
+  <img src="Showcase/First%20Implementation%20Chat%20With%20Ai.png" alt="First Implementation Chat With Ai" width="350" style="margin: 10px;"/>
+  <img src="Showcase/Main%20Menu%20Showcase.PNG" alt="Main Menu Showcase" width="350" style="margin: 10px;"/>
+  <img src="Showcase/Second%20Agent.PNG" alt="Second Agent" width="350" style="margin: 10px;"/>
+  <img src="Showcase/Second%20Implementation%20Chat%20With%20Ai.PNG" alt="Second Implementation Chat With Ai" width="350" style="margin: 10px;"/>
+</div>
+
+---
+
 ## 🧩 Project Structure
 
 ```
