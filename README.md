@@ -43,6 +43,11 @@ Ever felt lost in a complex codebase? Wish you had a smart assistant to help you
     - [Indexing a Project](#indexing-a-project)
     - [Main Menu Options](#main-menu-options)
     - [Agent Mode Tools](#agent-mode-tools)
+    - [HTTP API Server](#http-api-server)
+    - [MCP Integration](#mcp-integration)
+      - [Setting Up the MCP Server](#setting-up-the-mcp-server)
+      - [Using with Claude Desktop](#using-with-claude-desktop)
+      - [Using with Cursor](#using-with-cursor)
   - [Configuration](#configuration)
     - [Supported LLM Providers](#supported-llm-providers)
       - [Recommended Ollama Setup](#recommended-ollama-setup)
@@ -166,6 +171,245 @@ Agent Mode provides access to powerful tools:
 - **Web tools**: `google_search`, `ddg_search`, `bing_news_search`, `fetch_webpage`, `get_base_knowledge`
 
 > **💡 Pro Tip**: Agent Mode is the most cost-effective option when using cloud-based LLM providers. It makes fewer API calls compared to Chat Mode, which helps avoid rate limits and reduces costs. For the best experience with minimal expenses, consider using Agent Mode when working with paid API services.
+
+### HTTP API Server
+
+VerbalCodeAI includes a built-in HTTP API server that allows you to access its functionality programmatically. This is useful for integrating VerbalCodeAI with other tools or creating custom interfaces.
+
+To start the HTTP API server:
+
+```bash
+python app.py --serve [PORT]
+```
+
+Where `[PORT]` is the port number you want the server to listen on (default is 8000).
+
+The server provides the following endpoints:
+
+- `GET /api/health` - Health check
+- `POST /api/initialize` - Initialize a directory
+- `POST /api/ask` - Ask the agent a question
+- `POST /api/index/start` - Start indexing a directory
+- `GET /api/index/status` - Get indexing status
+
+Example usage with curl:
+
+```bash
+# Health check
+curl http://localhost:8000/api/health
+
+# Initialize a directory
+curl -X POST http://localhost:8000/api/initialize -H "Content-Type: application/json" -d '{"directory_path": "D:/path/to/your/project"}'
+
+# Ask a question
+curl -X POST http://localhost:8000/api/ask -H "Content-Type: application/json" -d '{"question": "What does this codebase do?"}'
+
+# Start indexing
+curl -X POST http://localhost:8000/api/index/start -H "Content-Type: application/json" -d '{"directory_path": "D:/path/to/your/project"}'
+
+# Get indexing status
+curl http://localhost:8000/api/index/status
+```
+
+By default, the server only accepts connections from localhost (127.0.0.1). To allow connections from any IP address, set the `HTTP_ALLOW_ALL_ORIGINS` environment variable to `TRUE` in your `.env` file.
+
+### MCP Integration
+
+VerbalCodeAI supports the Model Context Protocol (MCP), allowing you to connect it to Claude Desktop and other MCP-compatible AI assistants. This integration enables Claude to directly interact with your codebase, providing a powerful AI-assisted development experience.
+
+<div align="center">
+  <img src="Showcase/MCP Showcase.PNG" alt="MCP Showcase" width="700" style="margin: 10px;"/>
+</div>
+
+#### Setting Up the MCP Server
+
+The MCP server wraps the HTTP API server and provides tools for Claude to interact with VerbalCodeAI. Here's how to set it up:
+
+1. **Start the HTTP API Server**:
+   First, start the HTTP API server if it's not already running:
+
+   ```bash
+   python app.py --serve 8000
+   ```
+
+   You should see output confirming the server is running:
+
+   ```
+   Starting HTTP API server on 127.0.0.1:8000
+   Available endpoints:
+   - GET  /api/health - Health check
+   - POST /api/initialize - Initialize a directory
+   - POST /api/ask - Ask the agent a question
+   - POST /api/index/start - Start indexing a directory
+   - GET  /api/index/status - Get indexing status
+   Server is only accessible from localhost.
+   ```
+
+2. **Start the MCP Server**:
+   In a new terminal window, start the MCP server:
+
+   ```bash
+   python mcp_server.py
+   ```
+
+   The MCP server will automatically check if the HTTP API server is running and start it if needed.
+
+3. **Configure the MCP Server** (Optional):
+   You can configure the MCP server by setting the following environment variables in your `.env` file:
+
+   ```
+   # MCP Server Settings
+   MCP_API_URL=http://localhost:8000
+   MCP_HTTP_PORT=8000
+   ```
+
+#### Using with Claude Desktop
+
+To use VerbalCodeAI with Claude Desktop:
+
+1. **Install the MCP SDK**:
+   ```bash
+   pip install mcp
+   ```
+
+2. **Install the MCP Server in Claude Desktop**:
+
+   **Method 1: Using the command line**
+   ```bash
+   mcp install mcp_server.py
+   ```
+
+   **Method 2: Using JSON configuration**
+
+   You can also configure Claude Desktop to use VerbalCodeAI by adding an entry to the MCP servers configuration file. This is especially useful if you're using a virtual environment or need custom configuration.
+
+   1. Locate your Claude Desktop configuration directory:
+      - Windows: `%APPDATA%\Claude Desktop\User Data\Default\`
+      - macOS: `~/Library/Application Support/Claude Desktop/User Data/Default/`
+      - Linux: `~/.config/Claude Desktop/User Data/Default/`
+
+   2. Create or edit the `mcp_servers.json` file in this directory:
+      ```json
+      {
+        "mcpServers": {
+          "VerbalCodeAI": {
+            "command": "YOUR_VENV_PATH\\Scripts\\uv.EXE",
+            "args": [
+              "run",
+              "--with",
+              "mcp[cli]",
+              "--with",
+              "python-dotenv",
+              "--with",
+              "requests",
+              "mcp",
+              "run",
+              "PATH_TO_VERBALCODEAI\\mcp_server.py"
+            ]
+          }
+        }
+      }
+      ```
+
+      Replace:
+      - `YOUR_VENV_PATH` with the path to your Python virtual environment (e.g., `D:\\VerbalCodeAi\\.venv`)
+      - `PATH_TO_VERBALCODEAI` with the path to your VerbalCodeAI installation (e.g., `D:\\VerbalCodeAi`)
+
+      Example for a Windows installation:
+      ```json
+      {
+        "mcpServers": {
+          "VerbalCodeAI": {
+            "command": "D:\\VerbalCodeAi\\.venv\\Scripts\\uv.EXE",
+            "args": [
+              "run",
+              "--with",
+              "mcp[cli]",
+              "--with",
+              "python-dotenv",
+              "--with",
+              "requests",
+              "mcp",
+              "run",
+              "D:\\VerbalCodeAi\\mcp_server.py"
+            ]
+          }
+        }
+      }
+      ```
+
+   3. Restart Claude Desktop for the changes to take effect.
+
+3. **Open Claude Desktop**:
+   - Launch Claude Desktop
+   - Click on the "+" button to start a new conversation
+   - Select "VerbalCodeAI" from the list of available tools
+
+4. **Initialize a Project**:
+   In Claude Desktop, you can now use the following tools:
+   - `initialize_directory(directory_path)` - Initialize a directory for use with VerbalCodeAI
+   - `ask_agent(question)` - Ask the agent a question about the codebase
+   - `start_indexing(directory_path)` - Start indexing a directory
+   - `get_indexing_status()` - Get the status of the indexing process
+   - `health_check()` - Check if the HTTP API server is running
+   - `start_http_server_tool(port)` - Start the HTTP API server if it's not running
+   - `set_api_url(url)` - Set the API URL for the HTTP API server
+
+   Example conversation:
+
+   ```
+   User: Can you help me analyze my project?
+
+   Claude: I'd be happy to help you analyze your project using VerbalCodeAI. First, let's check if the HTTP API server is running.
+
+   [Tool: health_check]
+   Result: {"status": "ok", "message": "HTTP API server is running"}
+
+   Great! Now let's initialize your project. What's the path to your project directory?
+
+   User: D:/my-project
+
+   Claude: I'll initialize your project now.
+
+   [Tool: initialize_directory]
+   Input: {"directory_path": "D:/my-project"}
+   Result: {"status": "ok", "message": "Directory initialized successfully"}
+
+   Now I'll start indexing your project to analyze the codebase.
+
+   [Tool: start_indexing]
+   Input: {"directory_path": "D:/my-project"}
+   Result: {"status": "ok", "message": "Indexing started"}
+
+   Let's check the indexing status.
+
+   [Tool: get_indexing_status]
+   Result: {"status": "in_progress", "progress": 45, "message": "Indexing in progress"}
+
+   The indexing is currently at 45%. Once it's complete, I can help you analyze your codebase. What would you like to know about your project?
+   ```
+
+#### Using with Cursor
+
+[Cursor](https://cursor.sh/) is an AI-powered code editor that supports MCP. To use VerbalCodeAI with Cursor:
+
+1. **Install Cursor** if you haven't already from [cursor.sh](https://cursor.sh/)
+
+2. **Start the MCP Server**:
+   ```bash
+   python mcp_server.py
+   ```
+
+3. **Connect Cursor to the MCP Server**:
+   - Open Cursor
+   - Go to Settings > AI > Model Context Protocol
+   - Add a new MCP server with the URL `http://localhost:3000` (or the port your MCP server is running on)
+   - Select "VerbalCodeAI" from the list of available tools
+
+4. **Use VerbalCodeAI in Cursor**:
+   - Open your project in Cursor
+   - Use the AI chat to interact with VerbalCodeAI
+   - You can ask questions about your codebase, get explanations, and more
 
 ## Configuration
 
@@ -327,6 +571,7 @@ Below are some screenshots and showcase images of VerbalCodeAI in action:
   <img src="Showcase/Main%20Menu%20Showcase.PNG" alt="Main Menu Showcase" width="350" style="margin: 10px;"/>
   <img src="Showcase/Second%20Agent.PNG" alt="Second Agent" width="350" style="margin: 10px;"/>
   <img src="Showcase/Second%20Implementation%20Chat%20With%20Ai.PNG" alt="Second Implementation Chat With Ai" width="350" style="margin: 10px;"/>
+  <img src="Showcase/MCP%20Showcase.PNG" alt="MCP Integration with Claude Desktop" width="700" style="margin: 10px;"/>
 </div>
 
 ---
@@ -336,8 +581,11 @@ Below are some screenshots and showcase images of VerbalCodeAI in action:
 ```
 VerbalCodeAi/
 ├── app.py                  # Main application entry point
+├── mcp_server.py           # MCP server wrapper
+├── mcp_server_http.py      # HTTP-based MCP server implementation
 ├── mods/                   # Core modules
 │   ├── banners.py          # ASCII art banners
+│   ├── http_api.py         # HTTP API server implementation
 │   ├── llms.py             # LLM integration
 │   ├── terminal_ui.py      # Terminal UI components
 │   ├── terminal_utils.py   # Terminal utilities

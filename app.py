@@ -3,8 +3,10 @@
 VerbalCodeAI - Terminal Application
 
 A simple terminal-based interface for the VerbalCodeAI code assistant.
+Also provides an HTTP API server when run with the --serve option.
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -18,6 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import colorama
+import uvicorn
 from colorama import Fore, Style
 from dotenv import load_dotenv
 
@@ -26,6 +29,7 @@ try:
     from mods.code.agent_mode import AgentMode
     from mods.code.decisions import ChatHandler, FileSelector, ProjectAnalyzer
     from mods.code.indexer import FileIndexer
+    from mods.http_api import create_app
     from mods.terminal_ui import StreamingResponseHandler, display_response
     from mods.terminal_utils import (
         clear_screen,
@@ -1141,8 +1145,53 @@ class VerbalCodeAI:
             else:
                 print(f"\n{Fore.RED}Invalid choice. Please enter a number between 1 and 13.{Style.RESET_ALL}")
 
+def run_http_server(port: int, allow_all_origins: bool = None) -> None:
+    """Run the HTTP API server.
+
+    Args:
+        port: Port number to listen on
+        allow_all_origins: Whether to allow all origins or only localhost.
+                          If None, reads from environment variable.
+    """
+    app_instance = VerbalCodeAI()
+
+    if allow_all_origins is None:
+        allow_all_origins = app_instance._get_env_bool("HTTP_ALLOW_ALL_ORIGINS", False)
+
+    app = create_app(allow_all_origins=allow_all_origins)
+
+    host = "0.0.0.0" if allow_all_origins else "127.0.0.1"
+
+    print(f"{Fore.GREEN}Starting HTTP API server on {host}:{port}{Style.RESET_ALL}")
+    print(f"{Fore.YELLOW}Available endpoints:{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}- GET  /api/health{Style.RESET_ALL} - Health check")
+    print(f"{Fore.CYAN}- POST /api/initialize{Style.RESET_ALL} - Initialize a directory")
+    print(f"{Fore.CYAN}- POST /api/ask{Style.RESET_ALL} - Ask the agent a question")
+    print(f"{Fore.CYAN}- POST /api/index/start{Style.RESET_ALL} - Start indexing a directory")
+    print(f"{Fore.CYAN}- GET  /api/index/status{Style.RESET_ALL} - Get indexing status")
+
+    if allow_all_origins:
+        print(f"{Fore.RED}WARNING: Server is accessible from any IP address.{Style.RESET_ALL}")
+    else:
+        print(f"{Fore.GREEN}Server is only accessible from localhost.{Style.RESET_ALL}")
+
+    uvicorn.run(app, host=host, port=port)
+
 if __name__ == "__main__":
     try:
+        parser = argparse.ArgumentParser(description="VerbalCodeAI Terminal Application")
+        parser.add_argument("directory", nargs="?", help="Directory to index")
+        parser.add_argument("--serve", type=int, metavar="PORT", help="Run HTTP API server on specified port")
+        parser.add_argument("--allow-all-origins", action="store_true", help="Allow all origins for HTTP API (not just localhost)")
+        args = parser.parse_args()
+
+        if args.serve:
+            logger = setup_logging()
+            logger.info(f"Starting VerbalCodeAI HTTP API Server on port {args.serve}")
+
+            run_http_server(args.serve, args.allow_all_origins)
+            sys.exit(0)
+
         display_animated_banner(frame_delay=0.2)
 
         print(f"{Fore.CYAN}{Style.BRIGHT}Starting VerbalCodeAI Terminal Application...{Style.RESET_ALL}")
@@ -1152,8 +1201,8 @@ if __name__ == "__main__":
 
         app = VerbalCodeAI()
 
-        if len(sys.argv) > 1:
-            directory = sys.argv[1]
+        if args.directory:
+            directory = args.directory
             if os.path.isdir(directory):
                 print(f"{Fore.CYAN}Using directory from command line: {Style.BRIGHT}{directory}{Style.RESET_ALL}")
                 app.indexer = FileIndexer(directory)
