@@ -24,8 +24,11 @@ import uvicorn
 from colorama import Fore, Style
 from dotenv import load_dotenv
 
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
+
 try:
     from mods.banners import display_animated_banner
+    from mods.llms import get_current_provider
     from mods.code.agent_mode import AgentMode
     from mods.code.decisions import ChatHandler, FileSelector, ProjectAnalyzer
     from mods.code.indexer import FileIndexer
@@ -551,6 +554,7 @@ class VerbalCodeAI:
         )
 
         while True:
+            print(f"\n{Fore.YELLOW}Current provider: {Fore.CYAN}{get_current_provider().upper()}{Style.RESET_ALL}")
             print(
                 f"\n{Fore.GREEN}Your question (or '{Fore.RED}exit{Fore.GREEN}' to return to menu):{Style.RESET_ALL}"
             )

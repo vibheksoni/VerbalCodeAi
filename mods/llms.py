@@ -56,7 +56,7 @@ from groq import Groq, AsyncGroq
 
 logger = logging.getLogger("VerbalCodeAI.LLMs")
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
 
 AI_CHAT_PROVIDER: str = os.getenv("AI_CHAT_PROVIDER", "ollama")
 AI_EMBEDDING_PROVIDER: str = os.getenv("AI_EMBEDDING_PROVIDER", "ollama")
@@ -73,6 +73,16 @@ CHAT_LOGS_ENABLED: bool = os.getenv("CHAT_LOGS", "FALSE").upper() == "TRUE"
 MEMORY_ENABLED: bool = os.getenv("MEMORY_ENABLED", "TRUE").upper() == "TRUE"
 MAX_MEMORY_ITEMS: int = int(os.getenv("MAX_MEMORY_ITEMS", "10"))
 
+def get_current_provider() -> str:
+    """Get the current AI provider based on environment variables."""
+    if anthropic_client:
+        return "anthropic"
+    elif groq_client:
+        return "groq"
+    elif openai_client:
+        return "openai"
+    else:
+        return "ollama" if AI_CHAT_PROVIDER == "ollama" else "google" if AI_CHAT_PROVIDER == "google" else "openrouter"
 
 class ConversationMemory:
     """Manages memory for AI conversations to provide context and reduce redundant API calls."""
@@ -1189,21 +1199,25 @@ def _generate_response_anthropic(
             logger.debug("Anthropic client initialized or reinitialized with provided API key")
 
         formatted_messages = []
-
+        
         for msg in messages:
-            formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+            if msg["role"] != "system":
+                formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+            elif not system_prompt:
+                system_prompt = msg["content"]
+
+        if not max_tokens:
+            max_tokens = 4096
 
         completion_params = {
             "model": chat_model,
             "messages": formatted_messages,
             "temperature": temperature,
+            "max_tokens": max_tokens,
         }
 
         if system_prompt:
             completion_params["system"] = system_prompt
-
-        if max_tokens:
-            completion_params["max_tokens"] = max_tokens
 
         response = anthropic_client.messages.create(**completion_params)
 
@@ -1630,18 +1644,19 @@ async def generate_response_stream(
 
                 logger.info("Using streaming mode for Anthropic API")
 
+                if not max_tokens:
+                    max_tokens = 4096
+
                 completion_params = {
                     "model": chat_model,
                     "messages": formatted_messages,
                     "temperature": 0.7,
+                    "max_tokens": max_tokens,
                     "stream": True
                 }
 
                 if system_prompt:
                     completion_params["system"] = system_prompt
-
-                if max_tokens:
-                    completion_params["max_tokens"] = max_tokens
 
                 with anthropic_client.messages.stream(**completion_params) as stream:
                     for text in stream.text_stream:
@@ -1759,8 +1774,7 @@ async def generate_response_stream(
                         if retry < max_retries - 1 and response.status_code >= 500:
                             delay = retry_delay * (2 ** retry)
                             logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
-                            yield f"Server error. Retrying... ({retry+1}/{max_retries})"
-                            await asyncio.sleep(delay)
+                            time.sleep(delay)
                             continue
                         else:
                             yield f"Error generating response: {error_message}"
@@ -1775,8 +1789,7 @@ async def generate_response_stream(
                         if retry < max_retries - 1:
                             delay = retry_delay * (2 ** retry)
                             logger.warning(f"Retrying in {delay} seconds. Attempt {retry+1}/{max_retries}")
-                            yield f"No response received. Retrying... ({retry+1}/{max_retries})"
-                            await asyncio.sleep(delay)
+                            time.sleep(delay)
                             continue
                         else:
                             logger.error(error_message)
@@ -2180,14 +2193,15 @@ def _generate_description_anthropic(
 
         formatted_messages = [{"role": "user", "content": prompt}]
 
+        if not max_tokens:
+            max_tokens = 4096
+
         completion_params = {
             "model": DESCRIPTION_MODEL,
             "messages": formatted_messages,
             "temperature": temperature,
+            "max_tokens": max_tokens,
         }
-
-        if max_tokens:
-            completion_params["max_tokens"] = max_tokens
 
         response = anthropic_client.messages.create(**completion_params)
 

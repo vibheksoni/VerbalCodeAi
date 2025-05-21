@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger("VerbalCodeAI.Code.DirectoryParser")
 logger.info("[DIRECTORY PARSER] LOGGER WORKING")
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env", override=True)
 
 HASH_ALGORITHM: str = "md5"
 HASH_BUFFER_SIZE: int = 1024 * 1024

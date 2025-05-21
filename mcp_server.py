@@ -21,13 +21,14 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any, Dict
 
 import requests
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 logging.basicConfig(
     level=logging.INFO,

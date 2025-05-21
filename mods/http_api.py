@@ -8,6 +8,7 @@ import asyncio
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
@@ -22,8 +23,7 @@ from mods.code.agent_mode import AgentMode
 from mods.code.indexer import FileIndexer
 from mods.code.memory import MemoryManager
 
-load_dotenv()
-
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
 logger = logging.getLogger("VerbalCodeAI.HTTP")
 
 indexer: Optional[FileIndexer] = None
