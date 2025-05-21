@@ -140,7 +140,7 @@ printf "${YELLOW}[STEP 6] Setting up environment variables...${NC}\n"
 if [ ! -f ".env" ]; then
     printf "${BLUE}[INFO] Creating .env file with default settings...${NC}\n"
     cat > .env << EOL
-# Provider can be: ollama, google, openai, or openrouter
+# Provider can be: ollama, google, openai, anthropic, groq, or openrouter
 AI_CHAT_PROVIDER=ollama
 AI_EMBEDDING_PROVIDER=ollama
 AI_DESCRIPTION_PROVIDER=ollama
@@ -149,12 +149,16 @@ AI_DESCRIPTION_PROVIDER=ollama
 AI_CHAT_API_KEY=None
 AI_EMBEDDING_API_KEY=None
 AI_DESCRIPTION_API_KEY=None
+AI_ANTHROPIC_API_KEY=None
+AI_GROQ_API_KEY=None
 
 # Model names for each provider
-# For ollama: llama2, codellama, mistral, etc.
-# For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002
+# For ollama: llama2, codellama, mistral, etc. (embedding)
+# For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002 (embedding)
 # For OpenRouter: anthropic/claude-3-opus, openai/gpt-4-turbo, google/gemini-pro, etc.
 # For Google: gemini-pro, gemini-pro-vision
+# For Anthropic: claude-3-5-sonnet-latest, claude-3-opus-20240229, claude-3-haiku-20240307
+# For Groq: llama3-8b-8192, llama3-70b-8192, mixtral-8x7b-32768
 CHAT_MODEL=llama2
 EMBEDDING_MODEL=all-minilm:33m
 DESCRIPTION_MODEL=llama2

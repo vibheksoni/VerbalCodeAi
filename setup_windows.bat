@@ -123,7 +123,7 @@ echo [STEP 6] Setting up environment variables...
 if not exist .env (
     echo [INFO] Creating .env file with default settings...
     (
-        echo # Provider can be: ollama, google, openai, or openrouter
+        echo # Provider can be: ollama, google, openai, anthropic, groq, or openrouter
         echo AI_CHAT_PROVIDER=ollama
         echo AI_EMBEDDING_PROVIDER=ollama
         echo AI_DESCRIPTION_PROVIDER=ollama
@@ -132,12 +132,16 @@ if not exist .env (
         echo AI_CHAT_API_KEY=None
         echo AI_EMBEDDING_API_KEY=None
         echo AI_DESCRIPTION_API_KEY=None
+        echo AI_ANTHROPIC_API_KEY=None
+        echo AI_GROQ_API_KEY=None
         echo.
         echo # Model names for each provider
-        echo # For ollama: llama2, codellama, mistral, etc.
-        echo # For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002
+        echo # For ollama: llama2, codellama, mistral, etc. (embedding)
+        echo # For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002 (embedding)
         echo # For OpenRouter: anthropic/claude-3-opus, openai/gpt-4-turbo, google/gemini-pro, etc.
         echo # For Google: gemini-pro, gemini-pro-vision
+        echo # For Anthropic: claude-3-5-sonnet-latest, claude-3-opus-20240229, claude-3-haiku-20240307
+        echo # For Groq: llama3-8b-8192, llama3-70b-8192, mixtral-8x7b-32768
         echo CHAT_MODEL=llama2
         echo EMBEDDING_MODEL=all-minilm:33m
         echo DESCRIPTION_MODEL=llama2

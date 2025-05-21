@@ -130,7 +130,7 @@ Agent Mode provides access to powerful tools:
 VerbalCodeAI can be configured through the `.env` file:
 
 ```
-# Provider can be: ollama, google, openai, anthropic, or openrouter
+# Provider can be: ollama, google, openai, anthropic, groq, or openrouter
 AI_CHAT_PROVIDER=ollama
 AI_EMBEDDING_PROVIDER=ollama
 AI_DESCRIPTION_PROVIDER=ollama
@@ -140,13 +140,15 @@ AI_CHAT_API_KEY=None
 AI_EMBEDDING_API_KEY=None
 AI_DESCRIPTION_API_KEY=None
 AI_ANTHROPIC_API_KEY=None
+AI_GROQ_API_KEY=None
 
 # Model names for each provider
-# For ollama: llama2, codellama, mistral, etc.
+# For ollama: llama2, codellama, mistral, etc. (embedding)
 # For OpenAI: gpt-4, gpt-3.5-turbo, text-embedding-ada-002 (embedding)
 # For OpenRouter: anthropic/claude-3-opus, openai/gpt-4-turbo, google/gemini-pro, etc.
 # For Google: gemini-pro, gemini-pro-vision
 # For Anthropic: claude-3-5-sonnet-latest, claude-3-opus-20240229, claude-3-haiku-20240307
+# For Groq: llama3-8b-8192, llama3-70b-8192, mixtral-8x7b-32768
 CHAT_MODEL=llama2
 EMBEDDING_MODEL=all-minilm:33m
 DESCRIPTION_MODEL=llama2
@@ -170,6 +172,7 @@ COMMANDS_YOLO=FALSE
 - **Google AI**: Cloud-based models (requires API key)
 - **OpenAI**: OpenAI models for both chat and embeddings (requires API key)
 - **Anthropic**: Claude models for chat with streaming support (requires API key)
+- **Groq**: High-performance LLMs with extremely low latency (requires API key)
 - **OpenRouter**: Various cloud models (requires API key)
 
 #### Anthropic Claude Models
@@ -180,6 +183,15 @@ Anthropic's Claude models are particularly strong at understanding and generatin
 - **claude-3-haiku-20240307**: Fastest and most cost-effective Claude model
 
 Note: Anthropic does not provide embedding capabilities, so you'll need to use a different provider for embeddings.
+
+#### Groq Models
+
+Groq provides ultra-fast inference for popular open-source models. Available models include:
+- **llama3-8b-8192**: Smaller Llama 3 model with 8B parameters, good balance of performance and speed
+- **llama3-70b-8192**: Larger Llama 3 model with 70B parameters, excellent reasoning capabilities
+- **mixtral-8x7b-32768**: Mixtral model with 8x7B parameters and 32k context window
+
+Note: Groq does not provide embedding capabilities, so you'll need to use a different provider for embeddings.
 
 ### Performance Settings
 

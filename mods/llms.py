@@ -8,6 +8,7 @@ Supported providers:
 - Google AI (cloud-based models)
 - OpenAI (OpenAI models)
 - Anthropic (Claude models)
+- Groq (high-performance LLMs)
 - OpenRouter (various cloud models)
 
 Features:
@@ -51,6 +52,7 @@ from ollama import AsyncClient as OllamaAsyncClient
 
 import openai
 from anthropic import Anthropic, AsyncAnthropic
+from groq import Groq, AsyncGroq
 
 logger = logging.getLogger("VerbalCodeAI.LLMs")
 
@@ -63,6 +65,7 @@ AI_CHAT_API_KEY: str = os.getenv("AI_CHAT_API_KEY")
 AI_EMBEDDING_API_KEY: str = os.getenv("AI_EMBEDDING_API_KEY")
 AI_DESCRIPTION_API_KEY: str = os.getenv("AI_DESCRIPTION_API_KEY")
 AI_ANTHROPIC_API_KEY: str = os.getenv("AI_ANTHROPIC_API_KEY")
+AI_GROQ_API_KEY: str = os.getenv("AI_GROQ_API_KEY")
 
 CHAT_MODEL: str = os.getenv("CHAT_MODEL")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
@@ -334,6 +337,7 @@ PERFORMANCE_METRICS: Dict[
         "google": {"requests": 0, "time": 0.0},
         "openai": {"requests": 0, "time": 0.0},
         "anthropic": {"requests": 0, "time": 0.0},
+        "groq": {"requests": 0, "time": 0.0},
         "openrouter": {"requests": 0, "time": 0.0},
     },
 }
@@ -377,6 +381,14 @@ if AI_CHAT_PROVIDER == 'anthropic' or AI_DESCRIPTION_PROVIDER == 'anthropic':
         logger.debug("Anthropic client initialized")
     else:
         logger.warning("AI_ANTHROPIC_API_KEY not set or invalid")
+
+groq_client = None
+if AI_CHAT_PROVIDER == 'groq' or AI_DESCRIPTION_PROVIDER == 'groq':
+    if AI_GROQ_API_KEY and AI_GROQ_API_KEY.lower() != 'none':
+        groq_client = Groq(api_key=AI_GROQ_API_KEY)
+        logger.debug("Groq client initialized")
+    else:
+        logger.warning("AI_GROQ_API_KEY not set or invalid")
 PROMPT_TEMPLATES = {
     "code_description": """Analyze the following code and provide a concise description of its purpose and functionality.
 Focus on the main functionality, key components, and how they interact.
@@ -837,7 +849,11 @@ def generate_response(
             )
         elif chat_provider.lower() == "anthropic":
             response = _generate_response_anthropic(
-                messages, system_prompt, temperature, max_tokens, AI_ANTHROPIC_API_KEY, chat_model
+                messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
+            )
+        elif chat_provider.lower() == "groq":
+            response = _generate_response_groq(
+                messages, system_prompt, temperature, max_tokens, chat_api_key, chat_model
             )
         elif chat_provider.lower() == "openrouter":
             try:
@@ -1199,6 +1215,70 @@ def _generate_response_anthropic(
         raise Exception(f"Anthropic API error with model {chat_model}: {str(e)}")
 
 
+@track_performance("groq")
+def _generate_response_groq(
+    messages: List[Dict[str, str]],
+    system_prompt: Optional[str] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+) -> str:
+    """Generate a response using Groq.
+
+    Args:
+        messages (List[Dict[str, str]]): Validated message list.
+        system_prompt (Optional[str], optional): System prompt. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to 0.7.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
+        model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
+
+    Returns:
+        str: Generated response.
+
+    Raises:
+        ValueError: If API key is not set or client is not initialized.
+        Exception: If API call fails.
+    """
+    global groq_client
+
+    chat_api_key = api_key or AI_GROQ_API_KEY
+    chat_model = model_name or CHAT_MODEL
+
+    if not chat_api_key or chat_api_key.lower() == "none":
+        raise ValueError("API key not set for Groq provider")
+
+    try:
+        if api_key or not groq_client:
+            groq_client = Groq(api_key=chat_api_key)
+            logger.debug("Groq client initialized or reinitialized with provided API key")
+
+        formatted_messages = []
+
+        if system_prompt:
+            formatted_messages.append({"role": "system", "content": system_prompt})
+
+        for msg in messages:
+            formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        completion_params = {
+            "model": chat_model,
+            "messages": formatted_messages,
+            "temperature": temperature,
+        }
+
+        if max_tokens:
+            completion_params["max_tokens"] = max_tokens
+
+        response = groq_client.chat.completions.create(**completion_params)
+
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Groq API error with model {chat_model}: {str(e)}", exc_info=True)
+        raise Exception(f"Groq API error with model {chat_model}: {str(e)}")
+
+
 @track_performance("openrouter")
 def _generate_response_openrouter(
     messages: List[Dict[str, str]],
@@ -1538,12 +1618,12 @@ async def generate_response_stream(
         elif chat_provider.lower() == "anthropic":
             global anthropic_client
 
-            if not AI_ANTHROPIC_API_KEY or AI_ANTHROPIC_API_KEY.lower() == "none":
+            if not chat_api_key or chat_api_key.lower() == "none":
                 raise ValueError("API key not set for Anthropic provider")
 
             try:
                 if api_key or not anthropic_client:
-                    anthropic_client = Anthropic(api_key=AI_ANTHROPIC_API_KEY)
+                    anthropic_client = Anthropic(api_key=chat_api_key)
                     logger.debug("Anthropic client initialized or reinitialized with provided API key")
 
                 formatted_messages = []
@@ -1573,6 +1653,48 @@ async def generate_response_stream(
 
             except Exception as e:
                 logger.error(f"Error generating response from Anthropic API: {str(e)}")
+                yield f"Error generating response: {str(e)}"
+        elif chat_provider.lower() == "groq":
+            global groq_client
+
+            if not chat_api_key or chat_api_key.lower() == "none":
+                raise ValueError("API key not set for Groq provider")
+
+            try:
+                if api_key or not groq_client:
+                    groq_client = Groq(api_key=chat_api_key)
+                    logger.debug("Groq client initialized or reinitialized with provided API key")
+
+                formatted_messages = []
+
+                if system_prompt:
+                    formatted_messages.append({"role": "system", "content": system_prompt})
+
+                for msg in messages:
+                    formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+
+                logger.info("Using streaming mode for Groq API")
+
+                completion_params = {
+                    "model": chat_model,
+                    "messages": formatted_messages,
+                    "temperature": 0.7,
+                    "stream": True
+                }
+
+                if max_tokens:
+                    completion_params["max_tokens"] = max_tokens
+
+                stream = groq_client.chat.completions.create(**completion_params)
+
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        chunk_text = chunk.choices[0].delta.content
+                        full_response.append(chunk_text)
+                        yield chunk_text
+
+            except Exception as e:
+                logger.error(f"Error generating response from Groq API: {str(e)}")
                 yield f"Error generating response: {str(e)}"
         elif chat_provider.lower() == "openrouter":
             if not chat_api_key or chat_api_key.lower() == "none":
@@ -1798,6 +1920,8 @@ def generate_description(
             response = _generate_description_openai(prompt, temperature, max_tokens)
         elif AI_DESCRIPTION_PROVIDER == "anthropic":
             response = _generate_description_anthropic(prompt, temperature, max_tokens)
+        elif AI_DESCRIPTION_PROVIDER == "groq":
+            response = _generate_description_groq(prompt, temperature, max_tokens)
         elif AI_DESCRIPTION_PROVIDER == "openrouter":
             try:
                 response = _generate_description_openrouter(prompt, temperature, max_tokens)
@@ -2076,6 +2200,54 @@ def _generate_description_anthropic(
         raise Exception(f"Anthropic API error with model {DESCRIPTION_MODEL}: {str(e)}")
 
 
+@track_performance("groq")
+def _generate_description_groq(
+    prompt: str,
+    temperature: float = 0.3,
+    max_tokens: Optional[int] = None,
+) -> str:
+    """Generate a description using Groq.
+
+    Args:
+        prompt (str): The prompt text.
+        temperature (float): Temperature. Defaults to 0.3.
+        max_tokens (Optional[int]): Max tokens. Defaults to None.
+
+    Returns:
+        str: Generated description.
+
+    Raises:
+        ValueError: If API key is not set or client is not initialized.
+        Exception: If API call fails.
+    """
+    global groq_client
+
+    if not AI_GROQ_API_KEY or AI_GROQ_API_KEY.lower() == "none":
+        raise ValueError("AI_GROQ_API_KEY not set for Groq provider")
+
+    try:
+        if not groq_client:
+            groq_client = Groq(api_key=AI_GROQ_API_KEY)
+            logger.debug("Groq client initialized for description generation")
+
+        formatted_messages = [{"role": "user", "content": prompt}]
+
+        completion_params = {
+            "model": DESCRIPTION_MODEL,
+            "messages": formatted_messages,
+            "temperature": temperature,
+        }
+
+        if max_tokens:
+            completion_params["max_tokens"] = max_tokens
+
+        response = groq_client.chat.completions.create(**completion_params)
+
+        return response.choices[0].message.content
+    except Exception as e:
+        raise Exception(f"Groq API error with model {DESCRIPTION_MODEL}: {str(e)}")
+
+
 @track_performance("ollama")
 def _generate_description_ollama(
     prompt: str,
@@ -2156,6 +2328,7 @@ def reset_performance_metrics() -> None:
             "google": {"requests": 0, "time": 0.0},
             "openai": {"requests": 0, "time": 0.0},
             "anthropic": {"requests": 0, "time": 0.0},
+            "groq": {"requests": 0, "time": 0.0},
             "openrouter": {"requests": 0, "time": 0.0},
         },
     }
