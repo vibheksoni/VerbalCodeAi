@@ -218,7 +218,8 @@ By default, the server only accepts connections from localhost (127.0.0.1). To a
 VerbalCodeAI supports the Model Context Protocol (MCP), allowing you to connect it to Claude Desktop and other MCP-compatible AI assistants. This integration enables Claude to directly interact with your codebase, providing a powerful AI-assisted development experience.
 
 <div align="center">
-  <img src="Showcase/MCP Showcase.PNG" alt="MCP Showcase" width="700" style="margin: 10px;"/>
+  <img src="Showcase/MCP Showcase.PNG" alt="MCP Integration with Claude Desktop" style="width: 500px; height: 500px; max-width: 100%; object-fit: contain; margin: 10px;"/>
+  <img src="Showcase/MCP Showcase 2.PNG" alt="MCP Showcase - Example 2" style="width: 500px; height: 500px; max-width: 100%; object-fit: contain; margin: 10px;"/>
 </div>
 
 #### Setting Up the MCP Server
@@ -565,13 +566,12 @@ Or watch directly on [YouTube](https://youtu.be/5EnenUD-4E4?si=WIw-C4ne4JCP5dfZ)
 Below are some screenshots and showcase images of VerbalCodeAI in action:
 
 <div align="center">
-  <img src="Showcase/Agent%20Mode%20New%20commands.PNG" alt="Agent Mode New commands" width="350" style="margin: 10px;"/>
-  <img src="Showcase/Agent%20Showcase.png" alt="Agent Showcase" width="350" style="margin: 10px;"/>
-  <img src="Showcase/First%20Implementation%20Chat%20With%20Ai.png" alt="First Implementation Chat With Ai" width="350" style="margin: 10px;"/>
-  <img src="Showcase/Main%20Menu%20Showcase.PNG" alt="Main Menu Showcase" width="350" style="margin: 10px;"/>
-  <img src="Showcase/Second%20Agent.PNG" alt="Second Agent" width="350" style="margin: 10px;"/>
-  <img src="Showcase/Second%20Implementation%20Chat%20With%20Ai.PNG" alt="Second Implementation Chat With Ai" width="350" style="margin: 10px;"/>
-  <img src="Showcase/MCP%20Showcase.PNG" alt="MCP Integration with Claude Desktop" width="700" style="margin: 10px;"/>
+  <img src="Showcase/Agent Mode New commands.PNG" alt="Agent Mode New commands" style="width: 350px; max-width: 100%; height: auto; margin: 10px;"/>
+  <img src="Showcase/Agent Showcase.png" alt="Agent Showcase" style="width: 350px; max-width: 100%; height: auto; margin: 10px;"/>
+  <img src="Showcase/First Implementation Chat With Ai.png" alt="First Implementation Chat With Ai" style="width: 350px; max-width: 100%; height: auto; margin: 10px;"/>
+  <img src="Showcase/Main Menu Showcase.PNG" alt="Main Menu Showcase" style="width: 350px; max-width: 100%; height: auto; margin: 10px;"/>
+  <img src="Showcase/Second Agent.PNG" alt="Second Agent" style="width: 350px; max-width: 100%; height: auto; margin: 10px;"/>
+  <img src="Showcase/Second Implementation Chat With Ai.PNG" alt="Second Implementation Chat With Ai" style="width: 350px; max-width: 100%; height: auto; margin: 10px;"/>
 </div>
 
 ---
