@@ -23,7 +23,39 @@ A powerful AI-powered code assistant that helps you understand, navigate, and wo
   <img src="Showcase/VerbalCodeShowcase.gif" alt="VerbalCodeAI Showcase" style="max-width: 800px; max-height: 400px; width: 100%; height: auto;"/>
 </div>
 
-## ✨ Features
+
+
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [✨ Features](#-features)
+- [🚀 Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+    - [Windows](#windows)
+    - [Linux/macOS](#linuxmacos)
+    - [Manual Installation](#manual-installation)
+- [🖥️ Usage](#usage)
+  - [Starting the Application](#starting-the-application)
+  - [Indexing a Project](#indexing-a-project)
+  - [Main Menu Options](#main-menu-options)
+  - [Agent Mode Tools](#agent-mode-tools)
+- [⚙️ Configuration](#configuration)
+  - [Supported LLM Providers](#supported-llm-providers)
+  - [Recommended Ollama Setup](#recommended-ollama-setup)
+  - [Anthropic Claude Models](#anthropic-claude-models)
+  - [Groq Models](#groq-models)
+  - [Performance Settings](#performance-settings)
+  - [UI Settings](#ui-settings)
+- [📺 Video Showcase](#video-showcase)
+- [🖼️ Image Showcase](#image-showcase)
+- [🧩 Project Structure](#project-structure)
+- [🤝 Contributing](#contributing)
+- [📝 License](#license)
+- [🔗 Links](#links)
+- [🙏 Acknowledgements](#acknowledgements)
+
+</details>
 
 - 🔍 **Intelligent Code Search**: Find relevant code snippets using natural language queries
 - 📊 **Code Analysis**: Get insights about your codebase structure and dependencies
