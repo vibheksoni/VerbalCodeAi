@@ -77,12 +77,10 @@ def get_current_provider() -> str:
     """Get the current AI provider based on environment variables."""
     if anthropic_client:
         return "anthropic"
-    elif groq_client:
-        return "groq"
     elif openai_client:
         return "openai"
     else:
-        return "ollama" if AI_CHAT_PROVIDER == "ollama" else "google" if AI_CHAT_PROVIDER == "google" else "openrouter"
+        return "ollama" if AI_CHAT_PROVIDER == "ollama" else "google" if AI_CHAT_PROVIDER == "google" else "openrouter" if AI_CHAT_PROVIDER == "openrouter" else "groq" if AI_CHAT_PROVIDER == "groq" else "unknown"
 
 class ConversationMemory:
     """Manages memory for AI conversations to provide context and reduce redundant API calls."""
