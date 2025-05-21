@@ -61,13 +61,36 @@ load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
 AI_CHAT_PROVIDER: str = os.getenv("AI_CHAT_PROVIDER", "ollama")
 AI_EMBEDDING_PROVIDER: str = os.getenv("AI_EMBEDDING_PROVIDER", "ollama")
 AI_DESCRIPTION_PROVIDER: str = os.getenv("AI_DESCRIPTION_PROVIDER", "ollama")
+AI_AGENT_BUDDY_PROVIDER: str = os.getenv("AI_AGENT_BUDDY_PROVIDER", "ollama")
 AI_CHAT_API_KEY: str = os.getenv("AI_CHAT_API_KEY")
 AI_EMBEDDING_API_KEY: str = os.getenv("AI_EMBEDDING_API_KEY")
 AI_DESCRIPTION_API_KEY: str = os.getenv("AI_DESCRIPTION_API_KEY")
+AI_AGENT_BUDDY_API_KEY: str = os.getenv("AI_AGENT_BUDDY_API_KEY")
 
 CHAT_MODEL: str = os.getenv("CHAT_MODEL")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
 DESCRIPTION_MODEL: str = os.getenv("DESCRIPTION_MODEL")
+AI_AGENT_BUDDY_MODEL: str = os.getenv("AI_AGENT_BUDDY_MODEL")
+
+# Model temperature settings
+CHAT_MODEL_TEMPERATURE: float = float(os.getenv("CHAT_MODEL_TEMPERATURE", "0.7"))
+DESCRIPTION_MODEL_TEMPERATURE: float = float(os.getenv("DESCRIPTION_MODEL_TEMPERATURE", "0.3"))
+INTENT_DETECTION_TEMPERATURE: float = float(os.getenv("INTENT_DETECTION_TEMPERATURE", "0.1"))
+
+# Model max tokens settings
+CHAT_MODEL_MAX_TOKENS: int = int(os.getenv("CHAT_MODEL_MAX_TOKENS", "4096"))
+DESCRIPTION_MODEL_MAX_TOKENS: int = int(os.getenv("DESCRIPTION_MODEL_MAX_TOKENS", "4096"))
+INTENT_DETECTION_MAX_TOKENS: int = int(os.getenv("INTENT_DETECTION_MAX_TOKENS", "4096"))
+
+# Model top_p settings
+CHAT_MODEL_TOP_P: float = float(os.getenv("CHAT_MODEL_TOP_P", "0.95"))
+DESCRIPTION_MODEL_TOP_P: float = float(os.getenv("DESCRIPTION_MODEL_TOP_P", "0.95"))
+INTENT_DETECTION_TOP_P: float = float(os.getenv("INTENT_DETECTION_TOP_P", "0.95"))
+
+# Model top_k settings
+CHAT_MODEL_TOP_K: int = int(os.getenv("CHAT_MODEL_TOP_K", "40"))
+DESCRIPTION_MODEL_TOP_K: int = int(os.getenv("DESCRIPTION_MODEL_TOP_K", "40"))
+INTENT_DETECTION_TOP_K: int = int(os.getenv("INTENT_DETECTION_TOP_K", "40"))
 
 CHAT_LOGS_ENABLED: bool = os.getenv("CHAT_LOGS", "FALSE").upper() == "TRUE"
 MEMORY_ENABLED: bool = os.getenv("MEMORY_ENABLED", "TRUE").upper() == "TRUE"
@@ -765,8 +788,8 @@ def generate_response(
     system_prompt: Optional[str] = None,
     template_name: Optional[str] = None,
     template_vars: Optional[Dict[str, str]] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     project_path: Optional[str] = None,
     parse_thinking: bool = True,
     provider: Optional[str] = None,
@@ -782,8 +805,8 @@ def generate_response(
         system_prompt (Optional[str], optional): Optional system prompt to set context. Defaults to None.
         template_name (Optional[str], optional): Name of a prompt template to use. Defaults to None.
         template_vars (Optional[Dict[str, str]], optional): Variables to format the template with. Defaults to None.
-        temperature (float, optional): Temperature for response generation. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Maximum tokens to generate. Defaults to None.
+        temperature (float, optional): Temperature for response generation. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Maximum tokens to generate. Defaults to CHAT_MODEL_MAX_TOKENS.
         project_path (Optional[str], optional): Path to the project for chat logging. Defaults to None.
         parse_thinking (bool, optional): Whether to parse thinking tokens. Defaults to True.
         provider (Optional[str], optional): Override the AI provider. Defaults to None (use environment variable).
@@ -996,7 +1019,8 @@ def detect_intent(query: str) -> str:
             messages=[],
             template_name="intent_detection",
             template_vars=template_vars,
-            temperature=0.1,
+            temperature=INTENT_DETECTION_TEMPERATURE,
+            max_tokens=INTENT_DETECTION_MAX_TOKENS,
             parse_thinking=False,
             use_memory=False,
             add_to_memory=False
@@ -1026,8 +1050,8 @@ def detect_intent(query: str) -> str:
 def _generate_response_google(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
 ) -> str:
@@ -1036,8 +1060,8 @@ def _generate_response_google(
     Args:
         messages (List[Dict[str, str]]): Validated message list.
         system_prompt (Optional[str], optional): System prompt. Defaults to None.
-        temperature (float, optional): Temperature. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to CHAT_MODEL_MAX_TOKENS.
         api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
         model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
 
@@ -1060,9 +1084,9 @@ def _generate_response_google(
 
         generation_config = {
             "temperature": temperature,
-            "max_output_tokens": max_tokens if max_tokens else 4096,
-            "top_p": 0.95,
-            "top_k": 40,
+            "max_output_tokens": max_tokens,
+            "top_p": CHAT_MODEL_TOP_P,
+            "top_k": CHAT_MODEL_TOP_K,
         }
 
         model = genai.GenerativeModel(
@@ -1097,8 +1121,8 @@ def _generate_response_google(
 def _generate_response_openai(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
 ) -> str:
@@ -1107,8 +1131,8 @@ def _generate_response_openai(
     Args:
         messages (List[Dict[str, str]]): Validated message list.
         system_prompt (Optional[str], optional): System prompt. Defaults to None.
-        temperature (float, optional): Temperature. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to CHAT_MODEL_MAX_TOKENS.
         api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
         model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
 
@@ -1144,6 +1168,7 @@ def _generate_response_openai(
             "model": chat_model,
             "messages": formatted_messages,
             "temperature": temperature,
+            "top_p": CHAT_MODEL_TOP_P,
         }
 
         if max_tokens:
@@ -1161,8 +1186,8 @@ def _generate_response_openai(
 def _generate_response_anthropic(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
 ) -> str:
@@ -1171,8 +1196,8 @@ def _generate_response_anthropic(
     Args:
         messages (List[Dict[str, str]]): Validated message list.
         system_prompt (Optional[str], optional): System prompt. Defaults to None.
-        temperature (float, optional): Temperature. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to CHAT_MODEL_MAX_TOKENS.
         api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
         model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
 
@@ -1197,21 +1222,19 @@ def _generate_response_anthropic(
             logger.debug("Anthropic client initialized or reinitialized with provided API key")
 
         formatted_messages = []
-        
+
         for msg in messages:
             if msg["role"] != "system":
                 formatted_messages.append({"role": msg["role"], "content": msg["content"]})
             elif not system_prompt:
                 system_prompt = msg["content"]
 
-        if not max_tokens:
-            max_tokens = 4096
-
         completion_params = {
             "model": chat_model,
             "messages": formatted_messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "top_p": CHAT_MODEL_TOP_P,
         }
 
         if system_prompt:
@@ -1229,8 +1252,8 @@ def _generate_response_anthropic(
 def _generate_response_groq(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
 ) -> str:
@@ -1239,8 +1262,8 @@ def _generate_response_groq(
     Args:
         messages (List[Dict[str, str]]): Validated message list.
         system_prompt (Optional[str], optional): System prompt. Defaults to None.
-        temperature (float, optional): Temperature. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to CHAT_MODEL_MAX_TOKENS.
         api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
         model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
 
@@ -1275,6 +1298,7 @@ def _generate_response_groq(
             "model": chat_model,
             "messages": formatted_messages,
             "temperature": temperature,
+            "top_p": CHAT_MODEL_TOP_P,
         }
 
         if max_tokens:
@@ -1292,8 +1316,8 @@ def _generate_response_groq(
 def _generate_response_openrouter(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     api_key: Optional[str] = None,
     model_name: Optional[str] = None,
 ) -> str:
@@ -1302,8 +1326,8 @@ def _generate_response_openrouter(
     Args:
         messages (List[Dict[str, str]]): Validated message list.
         system_prompt (Optional[str], optional): System prompt. Defaults to None.
-        temperature (float, optional): Temperature. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to CHAT_MODEL_MAX_TOKENS.
         api_key (Optional[str], optional): Override the API key. Defaults to None (use environment variable).
         model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
 
@@ -1332,6 +1356,8 @@ def _generate_response_openrouter(
         "model": chat_model,
         "messages": formatted_messages,
         "temperature": temperature,
+        "top_p": CHAT_MODEL_TOP_P,
+        "top_k": CHAT_MODEL_TOP_K,
     }
 
     if max_tokens:
@@ -1419,8 +1445,8 @@ def _generate_response_openrouter(
 def _generate_response_ollama(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
     model_name: Optional[str] = None,
 ) -> str:
     """Generate a response using Ollama.
@@ -1428,8 +1454,8 @@ def _generate_response_ollama(
     Args:
         messages (List[Dict[str, str]]): Validated message list.
         system_prompt (Optional[str], optional): System prompt. Defaults to None.
-        temperature (float, optional): Temperature. Defaults to 0.7.
-        max_tokens (Optional[int], optional): Max tokens. Defaults to None.
+        temperature (float, optional): Temperature. Defaults to CHAT_MODEL_TEMPERATURE.
+        max_tokens (Optional[int], optional): Max tokens. Defaults to CHAT_MODEL_MAX_TOKENS.
         model_name (Optional[str], optional): Override the model name. Defaults to None (use environment variable).
 
     Returns:
@@ -1447,7 +1473,11 @@ def _generate_response_ollama(
             if pull_error.status_code != 404:
                 raise pull_error
 
-        options = {"temperature": temperature}
+        options = {
+            "temperature": temperature,
+            "top_p": CHAT_MODEL_TOP_P,
+            "top_k": CHAT_MODEL_TOP_K,
+        }
 
         if max_tokens:
             options["num_predict"] = max_tokens
@@ -1470,7 +1500,8 @@ async def generate_response_stream(
     provider: Optional[str] = None,
     api_key: Optional[str] = None,
     model: Optional[str] = None,
-    max_tokens: Optional[int] = None,
+    max_tokens: Optional[int] = CHAT_MODEL_MAX_TOKENS,
+    temperature: float = CHAT_MODEL_TEMPERATURE,
     use_memory: bool = True,
     add_to_memory: bool = True
 ) -> AsyncGenerator[str, None]:
@@ -1490,7 +1521,9 @@ async def generate_response_stream(
         model (Optional[str], optional):
             Override the model name. Defaults to None (use environment variable).
         max_tokens (Optional[int], optional):
-            Maximum tokens to generate. Defaults to None.
+            Maximum tokens to generate. Defaults to CHAT_MODEL_MAX_TOKENS.
+        temperature (float, optional):
+            Temperature for response generation. Defaults to CHAT_MODEL_TEMPERATURE.
         use_memory (bool, optional):
             Whether to use conversation memory. Defaults to True.
         add_to_memory (bool, optional):
@@ -1537,10 +1570,10 @@ async def generate_response_stream(
                 genai.configure(api_key=chat_api_key)
 
             generation_config = {
-                "temperature": 0.7,
-                "max_output_tokens": 4096,
-                "top_p": 0.95,
-                "top_k": 40,
+                "temperature": temperature,
+                "max_output_tokens": max_tokens,
+                "top_p": CHAT_MODEL_TOP_P,
+                "top_k": CHAT_MODEL_TOP_K,
             }
 
             model_obj = genai.GenerativeModel(
@@ -1606,7 +1639,8 @@ async def generate_response_stream(
                 completion_params = {
                     "model": chat_model,
                     "messages": formatted_messages,
-                    "temperature": 0.7,
+                    "temperature": temperature,
+                    "top_p": CHAT_MODEL_TOP_P,
                     "stream": True
                 }
 
@@ -1642,14 +1676,12 @@ async def generate_response_stream(
 
                 logger.info("Using streaming mode for Anthropic API")
 
-                if not max_tokens:
-                    max_tokens = 4096
-
                 completion_params = {
                     "model": chat_model,
                     "messages": formatted_messages,
-                    "temperature": 0.7,
+                    "temperature": temperature,
                     "max_tokens": max_tokens,
+                    "top_p": CHAT_MODEL_TOP_P,
                     "stream": True
                 }
 
@@ -1687,7 +1719,8 @@ async def generate_response_stream(
                 completion_params = {
                     "model": chat_model,
                     "messages": formatted_messages,
-                    "temperature": 0.7,
+                    "temperature": temperature,
+                    "top_p": CHAT_MODEL_TOP_P,
                     "stream": True
                 }
 
@@ -1721,8 +1754,10 @@ async def generate_response_stream(
             payload = {
                 "model": chat_model,
                 "messages": formatted_messages,
-                "temperature": 0.7,
-                "max_tokens": 4096,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "top_p": CHAT_MODEL_TOP_P,
+                "top_k": CHAT_MODEL_TOP_K,
                 "stream": False
             }
 
@@ -1830,18 +1865,33 @@ async def generate_response_stream(
                     if pull_error.status_code != 404:
                         raise pull_error
 
+                options = {
+                    "temperature": temperature,
+                    "top_p": CHAT_MODEL_TOP_P,
+                    "top_k": CHAT_MODEL_TOP_K,
+                }
+
+                if max_tokens:
+                    options["num_predict"] = max_tokens
+
                 if system_prompt:
+                    options["system"] = system_prompt
                     async for chunk in await client.chat(
                         model=chat_model,
                         messages=messages,
-                        options={"system": system_prompt},
+                        options=options,
                         stream=True,
                     ):
                         chunk_text = chunk.message.content
                         full_response.append(chunk_text)
                         yield chunk_text
                 else:
-                    async for chunk in await client.chat(model=chat_model, messages=messages, stream=True):
+                    async for chunk in await client.chat(
+                        model=chat_model,
+                        messages=messages,
+                        options=options,
+                        stream=True
+                    ):
                         chunk_text = chunk.message.content
                         full_response.append(chunk_text)
                         yield chunk_text
@@ -1880,8 +1930,8 @@ def generate_description(
     prompt: str,
     template_name: Optional[str] = None,
     template_vars: Optional[Dict[str, str]] = None,
-    temperature: float = 0.3,
-    max_tokens: Optional[int] = None,
+    temperature: float = DESCRIPTION_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = DESCRIPTION_MODEL_MAX_TOKENS,
     project_path: Optional[str] = None,
 ) -> str:
     """Generate a description using the description model with enhanced features.
@@ -1890,8 +1940,8 @@ def generate_description(
         prompt (str): The prompt to generate a description from.
         template_name (str, optional): Name of a prompt template to use. Defaults to None.
         template_vars (Dict[str, str], optional): Variables to format the template with. Defaults to None.
-        temperature (float, optional): Temperature for response generation. Defaults to 0.3.
-        max_tokens (int, optional): Maximum tokens to generate. Defaults to None.
+        temperature (float, optional): Temperature for response generation. Defaults to DESCRIPTION_MODEL_TEMPERATURE.
+        max_tokens (int, optional): Maximum tokens to generate. Defaults to DESCRIPTION_MODEL_MAX_TOKENS.
         project_path (str, optional): Path to the project for chat logging. Defaults to None.
 
     Returns:
@@ -1952,15 +2002,15 @@ def generate_description(
 @track_performance("openrouter")
 def _generate_description_openrouter(
     prompt: str,
-    temperature: float = 0.3,
-    max_tokens: Optional[int] = None,
+    temperature: float = DESCRIPTION_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = DESCRIPTION_MODEL_MAX_TOKENS,
 ) -> str:
     """Generate a description using OpenRouter.
 
     Args:
         prompt (str): The prompt text.
-        temperature (float): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int]): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to DESCRIPTION_MODEL_TEMPERATURE.
+        max_tokens (Optional[int]): Max tokens. Defaults to DESCRIPTION_MODEL_MAX_TOKENS.
 
     Returns:
         str: Generated description.
@@ -1980,6 +2030,8 @@ def _generate_description_openrouter(
         "model": DESCRIPTION_MODEL,
         "messages": messages,
         "temperature": temperature,
+        "top_p": DESCRIPTION_MODEL_TOP_P,
+        "top_k": DESCRIPTION_MODEL_TOP_K,
     }
 
     if max_tokens:
@@ -2066,15 +2118,15 @@ def _generate_description_openrouter(
 @track_performance("google")
 def _generate_description_google(
     prompt: str,
-    temperature: float = 0.3,
-    max_tokens: Optional[int] = None,
+    temperature: float = DESCRIPTION_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = DESCRIPTION_MODEL_MAX_TOKENS,
 ) -> str:
     """Generate a description using Google AI.
 
     Args:
         prompt (str): The prompt text.
-        temperature (float): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int]): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to DESCRIPTION_MODEL_TEMPERATURE.
+        max_tokens (Optional[int]): Max tokens. Defaults to DESCRIPTION_MODEL_MAX_TOKENS.
 
     Returns:
         str: Generated description.
@@ -2089,9 +2141,9 @@ def _generate_description_google(
     try:
         generation_config = {
             "temperature": temperature,
-            "max_output_tokens": max_tokens if max_tokens else 4096,
-            "top_p": 0.95,
-            "top_k": 40,
+            "max_output_tokens": max_tokens,
+            "top_p": DESCRIPTION_MODEL_TOP_P,
+            "top_k": DESCRIPTION_MODEL_TOP_K,
         }
 
         model = genai.GenerativeModel(
@@ -2114,15 +2166,15 @@ def _generate_description_google(
 @track_performance("openai")
 def _generate_description_openai(
     prompt: str,
-    temperature: float = 0.3,
-    max_tokens: Optional[int] = None,
+    temperature: float = DESCRIPTION_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = DESCRIPTION_MODEL_MAX_TOKENS,
 ) -> str:
     """Generate a description using OpenAI.
 
     Args:
         prompt (str): The prompt text.
-        temperature (float): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int]): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to DESCRIPTION_MODEL_TEMPERATURE.
+        max_tokens (Optional[int]): Max tokens. Defaults to DESCRIPTION_MODEL_MAX_TOKENS.
 
     Returns:
         str: Generated description.
@@ -2147,6 +2199,7 @@ def _generate_description_openai(
             "model": DESCRIPTION_MODEL,
             "messages": formatted_messages,
             "temperature": temperature,
+            "top_p": DESCRIPTION_MODEL_TOP_P,
         }
 
         if max_tokens:
@@ -2162,15 +2215,15 @@ def _generate_description_openai(
 @track_performance("anthropic")
 def _generate_description_anthropic(
     prompt: str,
-    temperature: float = 0.3,
-    max_tokens: Optional[int] = None,
+    temperature: float = DESCRIPTION_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = DESCRIPTION_MODEL_MAX_TOKENS,
 ) -> str:
     """Generate a description using Anthropic Claude.
 
     Args:
         prompt (str): The prompt text.
-        temperature (float): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int]): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to DESCRIPTION_MODEL_TEMPERATURE.
+        max_tokens (Optional[int]): Max tokens. Defaults to DESCRIPTION_MODEL_MAX_TOKENS.
 
     Returns:
         str: Generated description.
@@ -2191,14 +2244,12 @@ def _generate_description_anthropic(
 
         formatted_messages = [{"role": "user", "content": prompt}]
 
-        if not max_tokens:
-            max_tokens = 4096
-
         completion_params = {
             "model": DESCRIPTION_MODEL,
             "messages": formatted_messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "top_p": DESCRIPTION_MODEL_TOP_P,
         }
 
         response = anthropic_client.messages.create(**completion_params)
@@ -2211,15 +2262,15 @@ def _generate_description_anthropic(
 @track_performance("groq")
 def _generate_description_groq(
     prompt: str,
-    temperature: float = 0.3,
-    max_tokens: Optional[int] = None,
+    temperature: float = DESCRIPTION_MODEL_TEMPERATURE,
+    max_tokens: Optional[int] = DESCRIPTION_MODEL_MAX_TOKENS,
 ) -> str:
     """Generate a description using Groq.
 
     Args:
         prompt (str): The prompt text.
-        temperature (float): Temperature. Defaults to 0.3.
-        max_tokens (Optional[int]): Max tokens. Defaults to None.
+        temperature (float): Temperature. Defaults to DESCRIPTION_MODEL_TEMPERATURE.
+        max_tokens (Optional[int]): Max tokens. Defaults to DESCRIPTION_MODEL_MAX_TOKENS.
 
     Returns:
         str: Generated description.
@@ -2243,6 +2294,7 @@ def _generate_description_groq(
             "model": DESCRIPTION_MODEL,
             "messages": formatted_messages,
             "temperature": temperature,
+            "top_p": DESCRIPTION_MODEL_TOP_P,
         }
 
         if max_tokens:

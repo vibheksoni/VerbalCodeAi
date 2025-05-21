@@ -148,6 +148,26 @@ if not exist .env (
         echo DESCRIPTION_MODEL=llama2
         echo AI_AGENT_BUDDY_MODEL=llama3.2
         echo.
+        echo # Model Tempratures
+        echo CHAT_MODEL_TEMPERATURE=0.7
+        echo DESCRIPTION_MODEL_TEMPERATURE=0.3
+        echo AI_AGENT_BUDDY_MODEL_TEMPERATURE=0.7
+        echo INTENT_DETECTION_TEMPERATURE=0.1
+        echo.
+        echo # Model Max Tokens
+        echo CHAT_MODEL_MAX_TOKENS=4096
+        echo DESCRIPTION_MODEL_MAX_TOKENS=4096
+        echo AI_AGENT_BUDDY_MODEL_MAX_TOKENS=4096
+        echo INTENT_DETECTION_MAX_TOKENS=4096
+        echo.
+        echo # Other Model Settings
+        echo CHAT_MODEL_TOP_P=0.95
+        echo CHAT_MODEL_TOP_K=40
+        echo DESCRIPTION_MODEL_TOP_P=0.95
+        echo DESCRIPTION_MODEL_TOP_K=40
+        echo INTENT_DETECTION_TOP_P=0.95
+        echo INTENT_DETECTION_TOP_K=40
+        echo.
         echo # Optional: Site information for OpenRouter rankings
         echo SITE_URL=http://localhost:3000
         echo SITE_NAME=Local Development

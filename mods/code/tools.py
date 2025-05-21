@@ -25,6 +25,7 @@ import platform
 import re
 import subprocess
 import sys
+from dotenv import load_dotenv
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -54,6 +55,10 @@ from .terminal import terminal_manager
 
 logger = logging.getLogger("VerbalCodeAI.Tools")
 
+load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env", override=True)
+
+AI_AGENT_BUDDY_MODEL_TEMPERATURE: float = float(os.getenv("AI_AGENT_BUDDY_MODEL_TEMPERATURE", "0.7"))
+AI_AGENT_BUDDY_MODEL_MAX_TOKENS: int = int(os.getenv("AI_AGENT_BUDDY_MODEL_MAX_TOKENS", "1024"))
 
 class CodebaseTools:
     """A collection of tools for interacting with the codebase.
@@ -757,7 +762,7 @@ class CodebaseTools:
 
                                     if "imports" in code_analysis and code_analysis["imports"]:
                                         imports_list = []
-                                        for imp in code_analysis["imports"][:10]:  # Limit to 10 imports
+                                        for imp in code_analysis["imports"][:10]:
                                             if imp.get("type") == "import":
                                                 imports_list.append(imp.get("name", ""))
                                             elif imp.get("type") == "from_import":
@@ -794,10 +799,11 @@ class CodebaseTools:
 
             response = llms.generate_response(
                 messages=messages,
-                temperature=0.7,
                 parse_thinking=False,
                 provider=provider,
                 api_key=api_key,
+                max_tokens=AI_AGENT_BUDDY_MODEL_MAX_TOKENS,
+                temperature=AI_AGENT_BUDDY_MODEL_TEMPERATURE,
                 model=model,
             )
 
