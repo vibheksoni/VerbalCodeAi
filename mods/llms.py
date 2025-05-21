@@ -73,14 +73,14 @@ CHAT_LOGS_ENABLED: bool = os.getenv("CHAT_LOGS", "FALSE").upper() == "TRUE"
 MEMORY_ENABLED: bool = os.getenv("MEMORY_ENABLED", "TRUE").upper() == "TRUE"
 MAX_MEMORY_ITEMS: int = int(os.getenv("MAX_MEMORY_ITEMS", "10"))
 
-def get_current_provider() -> str:
-    """Get the current AI provider based on environment variables."""
+def get_current_provider() -> Tuple[str, str]:
+    """Get the current AI provider and Model based on environment variables."""
     if anthropic_client:
-        return "anthropic"
+        return "anthropic", CHAT_MODEL
     elif openai_client:
-        return "openai"
+        return "openai", CHAT_MODEL
     else:
-        return "ollama" if AI_CHAT_PROVIDER == "ollama" else "google" if AI_CHAT_PROVIDER == "google" else "openrouter" if AI_CHAT_PROVIDER == "openrouter" else "groq" if AI_CHAT_PROVIDER == "groq" else "unknown"
+        return "ollama" if AI_CHAT_PROVIDER == "ollama" else "google" if AI_CHAT_PROVIDER == "google" else "openrouter" if AI_CHAT_PROVIDER == "openrouter" else "groq" if AI_CHAT_PROVIDER == "groq" else "unknown", CHAT_MODEL
 
 class ConversationMemory:
     """Manages memory for AI conversations to provide context and reduce redundant API calls."""

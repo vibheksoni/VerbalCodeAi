@@ -554,7 +554,11 @@ class VerbalCodeAI:
         )
 
         while True:
-            print(f"\n{Fore.YELLOW}Current provider: {Fore.CYAN}{get_current_provider().upper()}{Style.RESET_ALL}")
+            provider, model = get_current_provider()
+            print(
+                f"\n{Fore.YELLOW}Current provider: {Fore.CYAN}{provider.upper()}"
+                f"{Fore.YELLOW}, model: {Fore.CYAN}{model}{Style.RESET_ALL}"
+            )
             print(
                 f"\n{Fore.GREEN}Your question (or '{Fore.RED}exit{Fore.GREEN}' to return to menu):{Style.RESET_ALL}"
             )
