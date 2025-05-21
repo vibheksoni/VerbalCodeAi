@@ -7,8 +7,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.11.6-blue)](https://www.python.org/downloads/release/python-3116/)
 [![Website](https://img.shields.io/badge/website-verbalcode.xyz-brightgreen)](https://verbalcode.xyz)
 
-A powerful AI-powered code assistant that helps you understand, navigate, and work with codebases more efficiently. VerbalCodeAI uses advanced embedding techniques and LLM integration to provide intelligent code analysis and assistance directly in your terminal.
-
+Ever felt lost in a complex codebase? Wish you had a smart assistant to help you navigate and understand code right in your terminal? VerbalCodeAI is here to help! This powerful AI-powered tool acts as your personal code companion, leveraging advanced embedding techniques and Large Language Model (LLM) integration. It offers intelligent code analysis, helps you search and understand your project, and provides assistance directly within your command-line interface, making your development workflow smoother and more efficient.
 
 ```yaml
 .       .      .          .    .--.        .           .
@@ -27,13 +26,13 @@ A powerful AI-powered code assistant that helps you understand, navigate, and wo
 <details>
 <summary><strong>Table of Contents</strong></summary>
 
-- [VerbalCodeAI](#verbalcodeai)
+- [VerbalCodeAI 🤖](#verbalcodeai-)
   - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
       - [Windows](#windows)
       - [Linux/macOS](#linuxmacos)
-      - [Manual Installation](#manual-installation)
+    - [Manual Installation](#manual-installation)
   - [Usage](#usage)
     - [Starting the Application](#starting-the-application)
     - [Indexing a Project](#indexing-a-project)
