@@ -24,36 +24,35 @@ A powerful AI-powered code assistant that helps you understand, navigate, and wo
 </div>
 
 
-
 <details>
 <summary><strong>Table of Contents</strong></summary>
 
-- [✨ Features](#-features)
-- [🚀 Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-    - [Windows](#windows)
-    - [Linux/macOS](#linuxmacos)
-    - [Manual Installation](#manual-installation)
-- [🖥️ Usage](#usage)
-  - [Starting the Application](#starting-the-application)
-  - [Indexing a Project](#indexing-a-project)
-  - [Main Menu Options](#main-menu-options)
-  - [Agent Mode Tools](#agent-mode-tools)
-- [⚙️ Configuration](#configuration)
-  - [Supported LLM Providers](#supported-llm-providers)
-  - [Recommended Ollama Setup](#recommended-ollama-setup)
-  - [Anthropic Claude Models](#anthropic-claude-models)
-  - [Groq Models](#groq-models)
-  - [Performance Settings](#performance-settings)
-  - [UI Settings](#ui-settings)
-- [📺 Video Showcase](#video-showcase)
-- [🖼️ Image Showcase](#image-showcase)
-- [🧩 Project Structure](#project-structure)
-- [🤝 Contributing](#contributing)
-- [📝 License](#license)
-- [🔗 Links](#links)
-- [🙏 Acknowledgements](#acknowledgements)
+- [VerbalCodeAI](#verbalcodeai)
+  - [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [Installation](#installation)
+      - [Windows](#windows)
+      - [Linux/macOS](#linuxmacos)
+      - [Manual Installation](#manual-installation)
+  - [Usage](#usage)
+    - [Starting the Application](#starting-the-application)
+    - [Indexing a Project](#indexing-a-project)
+    - [Main Menu Options](#main-menu-options)
+    - [Agent Mode Tools](#agent-mode-tools)
+  - [Configuration](#configuration)
+    - [Supported LLM Providers](#supported-llm-providers)
+      - [Recommended Ollama Setup](#recommended-ollama-setup)
+      - [Anthropic Claude Models](#anthropic-claude-models)
+      - [Groq Models](#groq-models)
+    - [Performance Settings](#performance-settings)
+    - [UI Settings](#ui-settings)
+  - [Video Showcase](#video-showcase)
+  - [Image Showcase](#image-showcase)
+  - [Project Structure](#project-structure)
+  - [Contributing](#contributing)
+  - [License](#license)
+  - [Links](#links)
+  - [Acknowledgements](#acknowledgements)
 
 </details>
 
@@ -67,7 +66,7 @@ A powerful AI-powered code assistant that helps you understand, navigate, and wo
 - 📝 **File Description**: Generate concise descriptions of code files
 - 🛠️ **Command Runner**: Execute system commands with AI assistance
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -125,7 +124,7 @@ If you prefer to set up manually:
 
 4. Create a `.env` file with your configuration (see `.env.example` for reference)
 
-## 🖥️ Usage
+## Usage
 
 ### Starting the Application
 
@@ -164,7 +163,7 @@ Agent Mode provides access to powerful tools:
 
 > **💡 Pro Tip**: Agent Mode is the most cost-effective option when using cloud-based LLM providers. It makes fewer API calls compared to Chat Mode, which helps avoid rate limits and reduces costs. For the best experience with minimal expenses, consider using Agent Mode when working with paid API services.
 
-## ⚙️ Configuration
+## Configuration
 
 VerbalCodeAI can be configured through the `.env` file:
 
@@ -299,7 +298,7 @@ Note: Groq does not provide embedding capabilities, so you'll need to use a diff
 
 
 
-## 📺 Video Showcase
+## Video Showcase
 
 Check out a quick video demonstration of VerbalCodeAI in action:
 
@@ -313,7 +312,7 @@ Or watch directly on [YouTube](https://youtu.be/5EnenUD-4E4?si=WIw-C4ne4JCP5dfZ)
 
 ---
 
-## 🖼️ Image Showcase
+## Image Showcase
 
 Below are some screenshots and showcase images of VerbalCodeAI in action:
 
@@ -328,7 +327,7 @@ Below are some screenshots and showcase images of VerbalCodeAI in action:
 
 ---
 
-## 🧩 Project Structure
+## Project Structure
 
 ```
 VerbalCodeAi/
@@ -352,7 +351,7 @@ VerbalCodeAi/
 └── setup_linux.sh          # Linux setup script
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -362,17 +361,17 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🔗 Links
+## Links
 
 - [Website](https://verbalcode.xyz)
 - [GitHub Repository](https://github.com/vibheksoni/VerbalCodeAi)
 - [Report Issues](https://github.com/vibheksoni/VerbalCodeAi/issues)
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 - [Ollama](https://ollama.com/) for local model execution
 - [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) for code parsing
