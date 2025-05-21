@@ -9,6 +9,7 @@
 
 A powerful AI-powered code assistant that helps you understand, navigate, and work with codebases more efficiently. VerbalCodeAI uses advanced embedding techniques and LLM integration to provide intelligent code analysis and assistance directly in your terminal.
 
+
 ```yaml
 .       .      .          .    .--.        .           .
  \     /       |          |   :            |          / \     o
@@ -17,6 +18,10 @@ A powerful AI-powered code assistant that helps you understand, navigate, and wo
     '  `--''   '`-'  `-'`-`-   `--'`-'  `-'`-`--'  '       `-' `-'
                        [AI Assistant for Code]
 ```
+
+<div align="center">
+  <img src="Showcase/VerbalCodeShowcase.gif" alt="VerbalCodeAI Showcase" style="max-width: 800px; max-height: 400px; width: 100%; height: auto;"/>
+</div>
 
 ## ✨ Features
 
