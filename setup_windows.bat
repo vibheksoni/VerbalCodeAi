@@ -127,11 +127,14 @@ if not exist .env (
         echo AI_CHAT_PROVIDER=ollama
         echo AI_EMBEDDING_PROVIDER=ollama
         echo AI_DESCRIPTION_PROVIDER=ollama
+        echo AI_AGENT_BUDDY_PROVIDER=ollama
         echo.
-        echo # API Keys for each provider (only needed if using that provider)
+        echo # API Keys for each functionality (only needed if using that provider)
+        echo # The same key will be used for the selected provider in each category
         echo AI_CHAT_API_KEY=None
         echo AI_EMBEDDING_API_KEY=None
         echo AI_DESCRIPTION_API_KEY=None
+        echo AI_AGENT_BUDDY_API_KEY=None
         echo.
         echo # Model names for each provider
         echo # For ollama: llama2, codellama, mistral, etc. (embedding)
@@ -143,6 +146,7 @@ if not exist .env (
         echo CHAT_MODEL=llama2
         echo EMBEDDING_MODEL=all-minilm:33m
         echo DESCRIPTION_MODEL=llama2
+        echo AI_AGENT_BUDDY_MODEL=llama3.2
         echo.
         echo # Optional: Site information for OpenRouter rankings
         echo SITE_URL=http://localhost:3000
@@ -160,12 +164,15 @@ if not exist .env (
         echo # Similarity threshold for embedding search (lower values return more results but may be less relevant)
         echo EMBEDDING_SIMILARITY_THRESHOLD=0.05
         echo.
+        echo # Maximum number of threads to use (will be calculated automatically if not set)
+        echo # MAX_THREADS=16
+        echo.
         echo # UI Settings
         echo # Enable/disable markdown rendering (TRUE/FALSE)
         echo ENABLE_MARKDOWN_RENDERING=TRUE
         echo # Show thinking blocks in AI responses (TRUE/FALSE)
         echo SHOW_THINKING_BLOCKS=FALSE
-        echo # Enable streaming mode for AI responses (TRUE/FALSE)
+        echo # Enable streaming mode for AI responses (TRUE/FALSE) # Tends to be slower for some reason # Broken for openrouter TODO: Fix this at some point !
         echo ENABLE_STREAMING_MODE=FALSE
         echo # Enable chat logging to save conversations (TRUE/FALSE)
         echo CHAT_LOGS=FALSE
@@ -177,6 +184,19 @@ if not exist .env (
         echo # When FALSE, the user will be prompted to confirm before executing any command
         echo # When TRUE, commands will execute automatically without confirmation
         echo COMMANDS_YOLO=FALSE
+        echo.
+        echo # HTTP API Server Settings
+        echo # Allow connections from any IP address (TRUE/FALSE)
+        echo # When FALSE, the server only accepts connections from localhost (127.0.0.1)
+        echo # When TRUE, the server accepts connections from any IP address (0.0.0.0)
+        echo # WARNING: Setting this to TRUE may expose your API to the internet
+        echo HTTP_ALLOW_ALL_ORIGINS=FALSE
+        echo.
+        echo # MCP Server Settings
+        echo # URL of the HTTP API server
+        echo MCP_API_URL=http://localhost:8000
+        echo # Port to run the HTTP API server on
+        echo MCP_HTTP_PORT=8000
     ) > .env
     echo [SUCCESS] Created .env file with default settings.
 ) else (

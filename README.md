@@ -478,6 +478,19 @@ MAX_MEMORY_ITEMS=10
 # When FALSE, the user will be prompted to confirm before executing any command
 # When TRUE, commands will execute automatically without confirmation
 COMMANDS_YOLO=FALSE
+
+# HTTP API Server Settings
+# Allow connections from any IP address (TRUE/FALSE)
+# When FALSE, the server only accepts connections from localhost (127.0.0.1)
+# When TRUE, the server accepts connections from any IP address (0.0.0.0)
+# WARNING: Setting this to TRUE may expose your API to the internet
+HTTP_ALLOW_ALL_ORIGINS=FALSE
+
+# MCP Server Settings
+# URL of the HTTP API server
+MCP_API_URL=http://localhost:8000
+# Port to run the HTTP API server on
+MCP_HTTP_PORT=8000
 ```
 
 ### Supported LLM Providers

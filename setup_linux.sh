@@ -144,11 +144,14 @@ if [ ! -f ".env" ]; then
 AI_CHAT_PROVIDER=ollama
 AI_EMBEDDING_PROVIDER=ollama
 AI_DESCRIPTION_PROVIDER=ollama
+AI_AGENT_BUDDY_PROVIDER=ollama
 
-# API Keys for each provider (only needed if using that provider)
+# API Keys for each functionality (only needed if using that provider)
+# The same key will be used for the selected provider in each category
 AI_CHAT_API_KEY=None
 AI_EMBEDDING_API_KEY=None
 AI_DESCRIPTION_API_KEY=None
+AI_AGENT_BUDDY_API_KEY=None
 
 # Model names for each provider
 # For ollama: llama2, codellama, mistral, etc. (embedding)
@@ -160,6 +163,7 @@ AI_DESCRIPTION_API_KEY=None
 CHAT_MODEL=llama2
 EMBEDDING_MODEL=all-minilm:33m
 DESCRIPTION_MODEL=llama2
+AI_AGENT_BUDDY_MODEL=llama3.2
 
 # Optional: Site information for OpenRouter rankings
 SITE_URL=http://localhost:3000
@@ -177,12 +181,15 @@ EMBEDDING_CACHE_SIZE=1000
 # Similarity threshold for embedding search (lower values return more results but may be less relevant)
 EMBEDDING_SIMILARITY_THRESHOLD=0.05
 
+# Maximum number of threads to use (will be calculated automatically if not set)
+# MAX_THREADS=16
+
 # UI Settings
 # Enable/disable markdown rendering (TRUE/FALSE)
 ENABLE_MARKDOWN_RENDERING=TRUE
 # Show thinking blocks in AI responses (TRUE/FALSE)
 SHOW_THINKING_BLOCKS=FALSE
-# Enable streaming mode for AI responses (TRUE/FALSE)
+# Enable streaming mode for AI responses (TRUE/FALSE) # Tends to be slower for some reason # Broken for openrouter TODO: Fix this at some point !
 ENABLE_STREAMING_MODE=FALSE
 # Enable chat logging to save conversations (TRUE/FALSE)
 CHAT_LOGS=FALSE
@@ -194,6 +201,19 @@ MAX_MEMORY_ITEMS=10
 # When FALSE, the user will be prompted to confirm before executing any command
 # When TRUE, commands will execute automatically without confirmation
 COMMANDS_YOLO=FALSE
+
+# HTTP API Server Settings
+# Allow connections from any IP address (TRUE/FALSE)
+# When FALSE, the server only accepts connections from localhost (127.0.0.1)
+# When TRUE, the server accepts connections from any IP address (0.0.0.0)
+# WARNING: Setting this to TRUE may expose your API to the internet
+HTTP_ALLOW_ALL_ORIGINS=FALSE
+
+# MCP Server Settings
+# URL of the HTTP API server
+MCP_API_URL=http://localhost:8000
+# Port to run the HTTP API server on
+MCP_HTTP_PORT=8000
 EOL
     printf "${GREEN}[SUCCESS] Created .env file with default settings.${NC}\n"
 else
