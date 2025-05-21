@@ -6,6 +6,9 @@
 [![GitHub license](https://img.shields.io/github/license/vibheksoni/VerbalCodeAi)](https://github.com/vibheksoni/VerbalCodeAi/blob/master/LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11.6-blue)](https://www.python.org/downloads/release/python-3116/)
 [![Website](https://img.shields.io/badge/website-verbalcode.xyz-brightgreen)](https://verbalcode.xyz)
+[![Discord](https://img.shields.io/discord/123DiscordServerID?label=Discord&logo=discord&style=social)](https://discord.gg/KpjSDEwWCF)
+
+Join our Discord server to hang out, ask questions, or offer help! We're currently looking for assistance in setting up the server, so if you're experienced with Discord setup, your help would be greatly appreciated! Click [here](https://discord.gg/KpjSDEwWCF) to join.
 
 Ever felt lost in a complex codebase? Wish you had a smart assistant to help you navigate and understand code right in your terminal? VerbalCodeAI is here to help! This powerful AI-powered tool acts as your personal code companion, leveraging advanced embedding techniques and Large Language Model (LLM) integration. It offers intelligent code analysis, helps you search and understand your project, and provides assistance directly within your command-line interface, making your development workflow smoother and more efficient.
 
