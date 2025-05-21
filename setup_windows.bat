@@ -132,8 +132,6 @@ if not exist .env (
         echo AI_CHAT_API_KEY=None
         echo AI_EMBEDDING_API_KEY=None
         echo AI_DESCRIPTION_API_KEY=None
-        echo AI_ANTHROPIC_API_KEY=None
-        echo AI_GROQ_API_KEY=None
         echo.
         echo # Model names for each provider
         echo # For ollama: llama2, codellama, mistral, etc. (embedding)
@@ -155,9 +153,12 @@ if not exist .env (
         echo # MEDIUM: Balanced resource usage, suitable for most systems
         echo # MAX: Maximum resource usage, suitable for high-end systems
         echo PERFORMANCE_MODE=MEDIUM
-        echo.
         echo # Maximum number of threads to use (will be calculated automatically if not set)
-        echo # MAX_THREADS=16
+        echo MAX_THREADS=16
+        echo # Cache size for embedding queries (higher values use more memory but improve performance)
+        echo EMBEDDING_CACHE_SIZE=1000
+        echo # Similarity threshold for embedding search (lower values return more results but may be less relevant)
+        echo EMBEDDING_SIMILARITY_THRESHOLD=0.05
         echo.
         echo # UI Settings
         echo # Enable/disable markdown rendering (TRUE/FALSE)

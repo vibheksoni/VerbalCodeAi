@@ -125,6 +125,8 @@ Agent Mode provides access to powerful tools:
 - **Helper tools**: `ask_buddy` (with context-aware second opinions)
 - **Web tools**: `google_search`, `ddg_search`, `bing_news_search`, `fetch_webpage`, `get_base_knowledge`
 
+> **💡 Pro Tip**: Agent Mode is the most cost-effective option when using cloud-based LLM providers. It makes fewer API calls compared to Chat Mode, which helps avoid rate limits and reduces costs. For the best experience with minimal expenses, consider using Agent Mode when working with paid API services.
+
 ## ⚙️ Configuration
 
 VerbalCodeAI can be configured through the `.env` file:
@@ -134,13 +136,14 @@ VerbalCodeAI can be configured through the `.env` file:
 AI_CHAT_PROVIDER=ollama
 AI_EMBEDDING_PROVIDER=ollama
 AI_DESCRIPTION_PROVIDER=ollama
+AI_AGENT_BUDDY_PROVIDER=ollama
 
-# API Keys for each provider (only needed if using that provider)
+# API Keys for each functionality (only needed if using that provider)
+# The same key will be used for the selected provider in each category
 AI_CHAT_API_KEY=None
 AI_EMBEDDING_API_KEY=None
 AI_DESCRIPTION_API_KEY=None
-AI_ANTHROPIC_API_KEY=None
-AI_GROQ_API_KEY=None
+AI_AGENT_BUDDY_API_KEY=None
 
 # Model names for each provider
 # For ollama: llama2, codellama, mistral, etc. (embedding)
@@ -152,17 +155,43 @@ AI_GROQ_API_KEY=None
 CHAT_MODEL=llama2
 EMBEDDING_MODEL=all-minilm:33m
 DESCRIPTION_MODEL=llama2
+AI_AGENT_BUDDY_MODEL=llama3.2
+
+# Optional: Site information for OpenRouter rankings
+SITE_URL=http://localhost:3000
+SITE_NAME=Local Development
 
 # Performance settings (LOW, MEDIUM, MAX)
+# LOW: Minimal resource usage, suitable for low-end systems
+# MEDIUM: Balanced resource usage, suitable for most systems
+# MAX: Maximum resource usage, suitable for high-end systems
 PERFORMANCE_MODE=MEDIUM
+# Maximum number of threads to use (will be calculated automatically if not set)
+MAX_THREADS=16
+# Cache size for embedding queries (higher values use more memory but improve performance)
+EMBEDDING_CACHE_SIZE=1000
+# Similarity threshold for embedding search (lower values return more results but may be less relevant)
+EMBEDDING_SIMILARITY_THRESHOLD=0.05
+
+# Maximum number of threads to use (will be calculated automatically if not set)
+# MAX_THREADS=16
 
 # UI Settings
+# Enable/disable markdown rendering (TRUE/FALSE)
 ENABLE_MARKDOWN_RENDERING=TRUE
+# Show thinking blocks in AI responses (TRUE/FALSE)
 SHOW_THINKING_BLOCKS=FALSE
+# Enable streaming mode for AI responses (TRUE/FALSE) # Tends to be slower for some reason # Broken for openrouter TODO: Fix this at some point !
 ENABLE_STREAMING_MODE=FALSE
+# Enable chat logging to save conversations (TRUE/FALSE)
 CHAT_LOGS=FALSE
+# Enable memory for AI conversations (TRUE/FALSE)
 MEMORY_ENABLED=TRUE
+# Maximum number of memory items to store
 MAX_MEMORY_ITEMS=10
+# Execute commands without confirmation (TRUE/FALSE)
+# When FALSE, the user will be prompted to confirm before executing any command
+# When TRUE, commands will execute automatically without confirmation
 COMMANDS_YOLO=FALSE
 ```
 
@@ -174,6 +203,28 @@ COMMANDS_YOLO=FALSE
 - **Anthropic**: Claude models for chat with streaming support (requires API key)
 - **Groq**: High-performance LLMs with extremely low latency (requires API key)
 - **OpenRouter**: Various cloud models (requires API key)
+
+#### Recommended Ollama Setup
+
+For the best local experience without any API costs, the developer recommends using these Ollama models:
+- **Chat/Description**: `gemma3` - Google's Gemma 3 model provides excellent code understanding and generation
+- **Embeddings**: `all-minilm` - Efficient and accurate embeddings for code search and retrieval
+
+To use these models, make sure they're installed in Ollama:
+```bash
+ollama pull gemma3
+ollama pull all-minilm
+```
+
+Then configure your `.env` file:
+```
+AI_CHAT_PROVIDER=ollama
+AI_EMBEDDING_PROVIDER=ollama
+AI_DESCRIPTION_PROVIDER=ollama
+CHAT_MODEL=gemma3
+EMBEDDING_MODEL=all-minilm:33m
+DESCRIPTION_MODEL=gemma3
+```
 
 #### Anthropic Claude Models
 

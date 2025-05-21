@@ -149,8 +149,6 @@ AI_DESCRIPTION_PROVIDER=ollama
 AI_CHAT_API_KEY=None
 AI_EMBEDDING_API_KEY=None
 AI_DESCRIPTION_API_KEY=None
-AI_ANTHROPIC_API_KEY=None
-AI_GROQ_API_KEY=None
 
 # Model names for each provider
 # For ollama: llama2, codellama, mistral, etc. (embedding)
@@ -172,9 +170,12 @@ SITE_NAME=Local Development
 # MEDIUM: Balanced resource usage, suitable for most systems
 # MAX: Maximum resource usage, suitable for high-end systems
 PERFORMANCE_MODE=MEDIUM
-
 # Maximum number of threads to use (will be calculated automatically if not set)
-# MAX_THREADS=16
+MAX_THREADS=16
+# Cache size for embedding queries (higher values use more memory but improve performance)
+EMBEDDING_CACHE_SIZE=1000
+# Similarity threshold for embedding search (lower values return more results but may be less relevant)
+EMBEDDING_SIMILARITY_THRESHOLD=0.05
 
 # UI Settings
 # Enable/disable markdown rendering (TRUE/FALSE)

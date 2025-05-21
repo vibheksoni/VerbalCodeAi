@@ -64,8 +64,6 @@ AI_DESCRIPTION_PROVIDER: str = os.getenv("AI_DESCRIPTION_PROVIDER", "ollama")
 AI_CHAT_API_KEY: str = os.getenv("AI_CHAT_API_KEY")
 AI_EMBEDDING_API_KEY: str = os.getenv("AI_EMBEDDING_API_KEY")
 AI_DESCRIPTION_API_KEY: str = os.getenv("AI_DESCRIPTION_API_KEY")
-AI_ANTHROPIC_API_KEY: str = os.getenv("AI_ANTHROPIC_API_KEY")
-AI_GROQ_API_KEY: str = os.getenv("AI_GROQ_API_KEY")
 
 CHAT_MODEL: str = os.getenv("CHAT_MODEL")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
@@ -375,20 +373,20 @@ if (AI_CHAT_PROVIDER == 'openai' or
         logger.debug("OpenAI client initialized")
 
 anthropic_client = None
-if AI_CHAT_PROVIDER == 'anthropic' or AI_DESCRIPTION_PROVIDER == 'anthropic':
-    if AI_ANTHROPIC_API_KEY and AI_ANTHROPIC_API_KEY.lower() != 'none':
-        anthropic_client = Anthropic(api_key=AI_ANTHROPIC_API_KEY)
-        logger.debug("Anthropic client initialized")
+if AI_CHAT_PROVIDER == 'anthropic':
+    if AI_CHAT_API_KEY and AI_CHAT_API_KEY.lower() != 'none':
+        anthropic_client = Anthropic(api_key=AI_CHAT_API_KEY)
+        logger.debug("Anthropic client initialized for chat")
     else:
-        logger.warning("AI_ANTHROPIC_API_KEY not set or invalid")
+        logger.warning("AI_CHAT_API_KEY not set or invalid for Anthropic provider")
+elif AI_DESCRIPTION_PROVIDER == 'anthropic':
+    if AI_DESCRIPTION_API_KEY and AI_DESCRIPTION_API_KEY.lower() != 'none':
+        anthropic_client = Anthropic(api_key=AI_DESCRIPTION_API_KEY)
+        logger.debug("Anthropic client initialized for description")
+    else:
+        logger.warning("AI_DESCRIPTION_API_KEY not set or invalid for Anthropic provider")
 
 groq_client = None
-if AI_CHAT_PROVIDER == 'groq' or AI_DESCRIPTION_PROVIDER == 'groq':
-    if AI_GROQ_API_KEY and AI_GROQ_API_KEY.lower() != 'none':
-        groq_client = Groq(api_key=AI_GROQ_API_KEY)
-        logger.debug("Groq client initialized")
-    else:
-        logger.warning("AI_GROQ_API_KEY not set or invalid")
 PROMPT_TEMPLATES = {
     "code_description": """Analyze the following code and provide a concise description of its purpose and functionality.
 Focus on the main functionality, key components, and how they interact.
@@ -1179,7 +1177,7 @@ def _generate_response_anthropic(
     """
     global anthropic_client
 
-    chat_api_key = api_key or AI_ANTHROPIC_API_KEY
+    chat_api_key = api_key or AI_CHAT_API_KEY
     chat_model = model_name or CHAT_MODEL
 
     if not chat_api_key or chat_api_key.lower() == "none":
@@ -1243,16 +1241,15 @@ def _generate_response_groq(
     """
     global groq_client
 
-    chat_api_key = api_key or AI_GROQ_API_KEY
+    chat_api_key = api_key or AI_CHAT_API_KEY
     chat_model = model_name or CHAT_MODEL
 
     if not chat_api_key or chat_api_key.lower() == "none":
         raise ValueError("API key not set for Groq provider")
 
     try:
-        if api_key or not groq_client:
-            groq_client = Groq(api_key=chat_api_key)
-            logger.debug("Groq client initialized or reinitialized with provided API key")
+        local_groq_client = Groq(api_key=chat_api_key)
+        logger.debug("Groq client initialized with provided API key")
 
         formatted_messages = []
 
@@ -1271,7 +1268,7 @@ def _generate_response_groq(
         if max_tokens:
             completion_params["max_tokens"] = max_tokens
 
-        response = groq_client.chat.completions.create(**completion_params)
+        response = local_groq_client.chat.completions.create(**completion_params)
 
         return response.choices[0].message.content
     except Exception as e:
@@ -1661,9 +1658,8 @@ async def generate_response_stream(
                 raise ValueError("API key not set for Groq provider")
 
             try:
-                if api_key or not groq_client:
-                    groq_client = Groq(api_key=chat_api_key)
-                    logger.debug("Groq client initialized or reinitialized with provided API key")
+                local_groq_client = Groq(api_key=chat_api_key)
+                logger.debug("Groq client initialized with provided API key")
 
                 formatted_messages = []
 
@@ -1685,7 +1681,7 @@ async def generate_response_stream(
                 if max_tokens:
                     completion_params["max_tokens"] = max_tokens
 
-                stream = groq_client.chat.completions.create(**completion_params)
+                stream = local_groq_client.chat.completions.create(**completion_params)
 
                 for chunk in stream:
                     if chunk.choices and chunk.choices[0].delta.content:
@@ -2174,12 +2170,12 @@ def _generate_description_anthropic(
     """
     global anthropic_client
 
-    if not AI_ANTHROPIC_API_KEY or AI_ANTHROPIC_API_KEY.lower() == "none":
-        raise ValueError("AI_ANTHROPIC_API_KEY not set for Anthropic provider")
+    if not AI_DESCRIPTION_API_KEY or AI_DESCRIPTION_API_KEY.lower() == "none":
+        raise ValueError("API key not set for Anthropic provider")
 
     try:
         if not anthropic_client:
-            anthropic_client = Anthropic(api_key=AI_ANTHROPIC_API_KEY)
+            anthropic_client = Anthropic(api_key=AI_DESCRIPTION_API_KEY)
             logger.debug("Anthropic client initialized for description generation")
 
         formatted_messages = [{"role": "user", "content": prompt}]
@@ -2222,13 +2218,12 @@ def _generate_description_groq(
     """
     global groq_client
 
-    if not AI_GROQ_API_KEY or AI_GROQ_API_KEY.lower() == "none":
-        raise ValueError("AI_GROQ_API_KEY not set for Groq provider")
+    if not AI_DESCRIPTION_API_KEY or AI_DESCRIPTION_API_KEY.lower() == "none":
+        raise ValueError("API key not set for Groq provider")
 
     try:
-        if not groq_client:
-            groq_client = Groq(api_key=AI_GROQ_API_KEY)
-            logger.debug("Groq client initialized for description generation")
+        local_groq_client = Groq(api_key=AI_DESCRIPTION_API_KEY)
+        logger.debug("Groq client initialized for description generation")
 
         formatted_messages = [{"role": "user", "content": prompt}]
 
@@ -2241,7 +2236,7 @@ def _generate_description_groq(
         if max_tokens:
             completion_params["max_tokens"] = max_tokens
 
-        response = groq_client.chat.completions.create(**completion_params)
+        response = local_groq_client.chat.completions.create(**completion_params)
 
         return response.choices[0].message.content
     except Exception as e:
