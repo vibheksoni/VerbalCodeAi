@@ -173,18 +173,302 @@ class CodeChunker:
         root_node = tree.root_node
 
         chunks: List[Dict[str, Any]] = []
+
+        chunks = self._extract_semantic_chunks(root_node, source_bytes, min_chunk_size)
+
+        if not chunks:
+            chunks = self._chunk_code_fallback(file_path, source_bytes, root_node, min_chunk_size)
+
+        return chunks
+
+    def _extract_semantic_chunks(self, root_node: Any, source_bytes: bytes, min_chunk_size: int = 50) -> List[Dict[str, Any]]:
+        """Extract semantically meaningful chunks from code using adaptive strategies.
+
+        This method works for any programming language by:
+        1. Identifying common semantic patterns (functions, classes, etc.)
+        2. Using heuristics to detect meaningful code structures
+        3. Adapting to different language syntaxes automatically
+
+        Args:
+            root_node (Any): The tree-sitter root node.
+            source_bytes (bytes): The source code in bytes.
+            min_chunk_size (int): Minimum size of a chunk in characters.
+
+        Returns:
+            List[Dict[str, Any]]: List of semantically meaningful chunks.
+        """
+        chunks: List[Dict[str, Any]] = []
+
+        semantic_chunks = self._find_semantic_nodes(root_node, source_bytes)
+
+        code_min_chunk_size = max(10, min_chunk_size // 3)
+
+        for node_info in semantic_chunks:
+            node, confidence = node_info['node'], node_info['confidence']
+            chunk_text = self._extract_node_text(node, source_bytes)
+
+            if len(chunk_text) >= code_min_chunk_size:
+                chunks.append({
+                    'text': chunk_text,
+                    'type': node.type,
+                    'start_line': node.start_point[0] + 1,
+                    'end_line': node.end_point[0] + 1,
+                    'confidence': confidence
+                })
+
+        chunks.sort(key=lambda x: (-x['confidence'], x['start_line']))
+
+        return chunks
+
+    def _find_semantic_nodes(self, root_node: Any, source_bytes: bytes) -> List[Dict[str, Any]]:
+        """Find nodes that are likely to be semantically meaningful (functions, classes, etc.).
+
+        Uses multiple heuristics to identify important code structures across languages.
+
+        Args:
+            root_node (Any): The tree-sitter root node.
+            source_bytes (bytes): The source code in bytes.
+
+        Returns:
+            List[Dict[str, Any]]: List of node info with confidence scores.
+        """
+        semantic_nodes = []
+
+        known_semantic_types = {
+            # Functions
+            'function_definition': 1.0,     # Python
+            'function_item': 1.0,           # Rust
+            'function_declaration': 1.0,    # C/C++
+            'function': 1.0,                # JavaScript
+            'arrow_function': 1.0,          # JavaScript
+            'method_definition': 1.0,       # Python, JavaScript
+            'function_expression': 1.0,     # JavaScript
+
+            # Classes and types
+            'class_definition': 1.0,        # Python
+            'class_declaration': 1.0,       # C++, Java, JavaScript
+            'struct_item': 1.0,             # Rust
+            'enum_item': 1.0,               # Rust
+            'trait_item': 1.0,              # Rust
+            'impl_item': 1.0,               # Rust
+            'interface_declaration': 1.0,   # TypeScript, Java
+            'type_alias': 1.0,              # TypeScript, Rust
+
+            # Other important constructs
+            'module_declaration': 0.9,      # TypeScript
+            'namespace_declaration': 0.9,   # C++
+            'package_declaration': 0.8,     # Java, Go
+        }
+
+        def traverse_node(node):
+            if node.type in known_semantic_types:
+                semantic_nodes.append({
+                    'node': node,
+                    'confidence': known_semantic_types[node.type],
+                    'reason': f'known_type:{node.type}'
+                })
+            else:
+                confidence = self._calculate_semantic_confidence(node, source_bytes)
+                if confidence > 0.5:
+                    semantic_nodes.append({
+                        'node': node,
+                        'confidence': confidence,
+                        'reason': 'heuristic_analysis'
+                    })
+
+            if node.child_count > 0 and node.child_count < 50:
+                for child in node.children:
+                    traverse_node(child)
+
+        traverse_node(root_node)
+
+        semantic_nodes = self._remove_overlapping_nodes(semantic_nodes)
+
+        return semantic_nodes
+
+    def _calculate_semantic_confidence(self, node: Any, source_bytes: bytes) -> float:
+        """Calculate confidence that a node represents a meaningful semantic unit.
+
+        Uses various heuristics to determine if an unknown node type is likely
+        to be a function, class, or other important code structure.
+
+        Args:
+            node (Any): The tree-sitter node to analyze.
+            source_bytes (bytes): The source code in bytes.
+
+        Returns:
+            float: Confidence score between 0.0 and 1.0.
+        """
+        confidence = 0.0
+        node_text = self._extract_node_text(node, source_bytes).lower()
+
+        semantic_keywords = ['function', 'class', 'method', 'def', 'fn', 'struct', 'enum', 'trait', 'impl', 'interface', 'type']
+        for keyword in semantic_keywords:
+            if keyword in node.type.lower():
+                confidence += 0.4
+                break
+
+        definition_patterns = [
+            'def ', 'function ', 'class ', 'fn ', 'struct ', 'enum ', 'trait ', 'impl ',
+            'interface ', 'type ', 'const ', 'let ', 'var ', 'public ', 'private ',
+            'static ', 'async ', 'export '
+        ]
+        for pattern in definition_patterns:
+            if node_text.startswith(pattern):
+                confidence += 0.3
+                break
+
+        node_size = len(node_text)
+        if 20 <= node_size <= 2000:
+            confidence += 0.2
+        elif 10 <= node_size <= 5000:
+            confidence += 0.1
+
+        brace_balance = node_text.count('{') - node_text.count('}')
+        paren_balance = node_text.count('(') - node_text.count(')')
+        if abs(brace_balance) <= 1 and abs(paren_balance) <= 1:
+            confidence += 0.2
+
+        code_patterns = ['(', ')', '{', '}', ';', '=', 'return', 'if', 'for', 'while']
+        pattern_count = sum(1 for pattern in code_patterns if pattern in node_text)
+        if pattern_count >= 3:
+            confidence += 0.1
+
+        node_depth = self._calculate_node_depth(node)
+        if 1 <= node_depth <= 3:
+            confidence += 0.1
+
+        return min(confidence, 1.0)  # Cap at 1.0
+
+    def _calculate_node_depth(self, node: Any) -> int:
+        """Calculate the depth of a node in the syntax tree."""
+        depth = 0
+        current = node.parent
+        while current is not None:
+            depth += 1
+            current = current.parent
+        return depth
+
+    def _remove_overlapping_nodes(self, semantic_nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove overlapping nodes, preferring higher confidence and more specific scope."""
+        if not semantic_nodes:
+            return []
+
+        semantic_nodes.sort(key=lambda x: (-x['confidence'], x['node'].end_byte - x['node'].start_byte))
+
+        filtered_nodes = []
+
+        for node_info in semantic_nodes:
+            node = node_info['node']
+            overlaps = False
+
+            for selected_info in filtered_nodes:
+                selected_node = selected_info['node']
+
+                if (node.start_byte < selected_node.end_byte and
+                    node.end_byte > selected_node.start_byte):
+                    overlaps = True
+                    break
+
+            if not overlaps:
+                filtered_nodes.append(node_info)
+
+        return filtered_nodes
+
+    def _chunk_code_fallback(self, file_path: str, source_bytes: bytes, root_node: Any, min_chunk_size: int = 50) -> List[Dict[str, Any]]:
+        """Fallback chunking strategy for code files without functions/classes.
+
+        This method tries different strategies to create meaningful chunks from code files
+        that don't have traditional function or class definitions.
+
+        Args:
+            file_path (str): Path to the code file.
+            source_bytes (bytes): The source code in bytes.
+            root_node (Any): The tree-sitter root node.
+            min_chunk_size (int): Minimum size of a chunk in characters.
+
+        Returns:
+            List[Dict[str, Any]]: List of dictionaries containing chunk info.
+        """
+        chunks: List[Dict[str, Any]] = []
+
+        meaningful_nodes = []
         for child in root_node.children:
-            if child.type in ('function_definition', 'class_definition', 'method_definition'):
-                chunk_text: str = self._extract_node_text(child, source_bytes)
+            if child.type in (
+                'import_statement', 'import_from_statement',         # Python imports
+                'assignment', 'expression_statement',                # Assignments and expressions
+                'if_statement', 'for_statement', 'while_statement',  # Control flow
+                'try_statement', 'with_statement',                   # Exception handling, context managers
+                'decorated_definition',                              # Decorated functions/classes
+                'global_statement', 'nonlocal_statement',            # Scope declarations
+                'assert_statement', 'pass_statement',                # Other statements
+                'variable_declaration', 'const_declaration',         # JavaScript/TypeScript
+                'struct_item', 'enum_item', 'impl_item',             # Rust
+                'package_declaration', 'interface_declaration',      # Java/Go
+            ):
+                meaningful_nodes.append(child)
+
+        if meaningful_nodes:
+            current_chunk_nodes = []
+            current_chunk_size = 0
+
+            for node in meaningful_nodes:
+                node_text = self._extract_node_text(node, source_bytes)
+                node_size = len(node_text)
+
+                if current_chunk_nodes and (current_chunk_size + node_size > 500):
+                    chunk_text = self._combine_nodes_text(current_chunk_nodes, source_bytes)
+                    if len(chunk_text) >= min_chunk_size:
+                        chunks.append({
+                            'text': chunk_text,
+                            'type': 'code_block',
+                            'start_line': current_chunk_nodes[0].start_point[0] + 1,
+                            'end_line': current_chunk_nodes[-1].end_point[0] + 1
+                        })
+                    current_chunk_nodes = []
+                    current_chunk_size = 0
+
+                current_chunk_nodes.append(node)
+                current_chunk_size += node_size
+
+            if current_chunk_nodes:
+                chunk_text = self._combine_nodes_text(current_chunk_nodes, source_bytes)
                 if len(chunk_text) >= min_chunk_size:
                     chunks.append({
                         'text': chunk_text,
-                        'type': child.type,
-                        'start_line': child.start_point[0] + 1,
-                        'end_line': child.end_point[0] + 1
+                        'type': 'code_block',
+                        'start_line': current_chunk_nodes[0].start_point[0] + 1,
+                        'end_line': current_chunk_nodes[-1].end_point[0] + 1
                     })
 
+        if not chunks:
+            full_text = source_bytes.decode('utf-8', errors='replace')
+            if len(full_text) >= min_chunk_size:
+                chunks.append({
+                    'text': full_text,
+                    'type': 'full_file',
+                    'start_line': 1,
+                    'end_line': full_text.count('\n') + 1
+                })
+
         return chunks
+
+    def _combine_nodes_text(self, nodes: List[Any], source_bytes: bytes) -> str:
+        """Combine text from multiple tree-sitter nodes.
+
+        Args:
+            nodes (List[Any]): List of tree-sitter nodes.
+            source_bytes (bytes): The source code in bytes.
+
+        Returns:
+            str: Combined text from all nodes.
+        """
+        if not nodes:
+            return ""
+
+        start_byte = nodes[0].start_byte
+        end_byte = nodes[-1].end_byte
+        return source_bytes[start_byte:end_byte].decode('utf-8', errors='replace')
 
     def _chunk_generic_text_file(self, file_path: str, min_chunk_size: int = 50) -> List[Dict[str, Any]]:
         """Process a generic text file by splitting it into manageable chunks.
@@ -515,7 +799,7 @@ class SimilaritySearch:
                         npz_files_loaded += 1
                     except Exception as e:
                         logger.warning(f"Error loading NPZ file {embed_path}: {e}")
-        
+
         if npz_files_loaded == 0:
             logger.info("No NPZ files found. Attempting to load embeddings directly from JSON files.")
             json_files_loaded = 0
@@ -615,10 +899,6 @@ class SimilaritySearch:
             if not query_emb_result or len(query_emb_result) == 0:
                 logger.warning(f"Failed to generate embedding for query: {query}")
                 return []
-
-            if isinstance(query_emb_result[0], (float, int)):
-                query_emb_result = [query_emb_result]
-                logger.debug(f"Converted flat embedding to nested list format")
 
             query_emb: np.ndarray = np.array(query_emb_result[0])
 

@@ -935,12 +935,27 @@ Respond ONLY with file paths, one per line, between <files> tags:
             return all_results[:top_k]
 
         self.logger.warning("No SimilaritySearch instance available, using fallback method")
-        query_embeddings = [np.array(generate_embed(q)[0]) for q in search_queries]
+
+        query_embeddings = []
+        for q in search_queries:
+            emb_result = generate_embed(q)
+            if emb_result and len(emb_result) > 0:
+                query_embeddings.append(np.array(emb_result[0]))
+            else:
+                self.logger.warning(f"Failed to generate embedding for query: {q}")
+
+        if not query_embeddings:
+            self.logger.error("Failed to generate embeddings for any search queries")
+            return []
 
         all_results = []
         for file_info in files:
             for chunk in file_info.chunks:
-                chunk_emb = np.array(generate_embed(chunk["text"])[0])
+                chunk_emb_result = generate_embed(chunk["text"])
+                if not chunk_emb_result or len(chunk_emb_result) == 0:
+                    continue
+
+                chunk_emb = np.array(chunk_emb_result[0])
                 chunk_emb_norm = np.linalg.norm(chunk_emb) + 1e-8
 
                 max_similarity = 0.0

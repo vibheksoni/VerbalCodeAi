@@ -184,6 +184,14 @@ if not exist .env (
         echo # Similarity threshold for embedding search (lower values return more results but may be less relevant)
         echo EMBEDDING_SIMILARITY_THRESHOLD=0.05
         echo.
+        echo # API Rate Limiting Settings
+        echo # Delay in milliseconds between embedding API calls to prevent rate limiting
+        echo # Recommended: 100ms for Google, 0ms for OpenAI/Ollama (set to 0 to disable)
+        echo EMBEDDING_API_DELAY_MS=100
+        echo # Delay in milliseconds between description generation API calls to prevent rate limiting
+        echo # Recommended: 100ms for Google, 0ms for OpenAI/Ollama (set to 0 to disable)
+        echo DESCRIPTION_API_DELAY_MS=100
+        echo.
         echo # Maximum number of threads to use (will be calculated automatically if not set)
         echo # MAX_THREADS=16
         echo.

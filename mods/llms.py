@@ -72,22 +72,18 @@ EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
 DESCRIPTION_MODEL: str = os.getenv("DESCRIPTION_MODEL")
 AI_AGENT_BUDDY_MODEL: str = os.getenv("AI_AGENT_BUDDY_MODEL")
 
-# Model temperature settings
 CHAT_MODEL_TEMPERATURE: float = float(os.getenv("CHAT_MODEL_TEMPERATURE", "0.7"))
 DESCRIPTION_MODEL_TEMPERATURE: float = float(os.getenv("DESCRIPTION_MODEL_TEMPERATURE", "0.3"))
 INTENT_DETECTION_TEMPERATURE: float = float(os.getenv("INTENT_DETECTION_TEMPERATURE", "0.1"))
 
-# Model max tokens settings
 CHAT_MODEL_MAX_TOKENS: int = int(os.getenv("CHAT_MODEL_MAX_TOKENS", "4096"))
 DESCRIPTION_MODEL_MAX_TOKENS: int = int(os.getenv("DESCRIPTION_MODEL_MAX_TOKENS", "4096"))
 INTENT_DETECTION_MAX_TOKENS: int = int(os.getenv("INTENT_DETECTION_MAX_TOKENS", "4096"))
 
-# Model top_p settings
 CHAT_MODEL_TOP_P: float = float(os.getenv("CHAT_MODEL_TOP_P", "0.95"))
 DESCRIPTION_MODEL_TOP_P: float = float(os.getenv("DESCRIPTION_MODEL_TOP_P", "0.95"))
 INTENT_DETECTION_TOP_P: float = float(os.getenv("INTENT_DETECTION_TOP_P", "0.95"))
 
-# Model top_k settings
 CHAT_MODEL_TOP_K: int = int(os.getenv("CHAT_MODEL_TOP_K", "40"))
 DESCRIPTION_MODEL_TOP_K: int = int(os.getenv("DESCRIPTION_MODEL_TOP_K", "40"))
 INTENT_DETECTION_TOP_K: int = int(os.getenv("INTENT_DETECTION_TOP_K", "40"))
@@ -96,14 +92,12 @@ CHAT_LOGS_ENABLED: bool = os.getenv("CHAT_LOGS", "FALSE").upper() == "TRUE"
 MEMORY_ENABLED: bool = os.getenv("MEMORY_ENABLED", "TRUE").upper() == "TRUE"
 MAX_MEMORY_ITEMS: int = int(os.getenv("MAX_MEMORY_ITEMS", "10"))
 
+EMBEDDING_API_DELAY_MS: int = int(os.getenv("EMBEDDING_API_DELAY_MS", "100"))
+DESCRIPTION_API_DELAY_MS: int = int(os.getenv("DESCRIPTION_API_DELAY_MS", "100"))
+
 def get_current_provider() -> Tuple[str, str]:
     """Get the current AI provider and Model based on environment variables."""
-    if anthropic_client:
-        return "anthropic", CHAT_MODEL
-    elif openai_client:
-        return "openai", CHAT_MODEL
-    else:
-        return "ollama" if AI_CHAT_PROVIDER == "ollama" else "google" if AI_CHAT_PROVIDER == "google" else "openrouter" if AI_CHAT_PROVIDER == "openrouter" else "groq" if AI_CHAT_PROVIDER == "groq" else "unknown", CHAT_MODEL
+    return AI_CHAT_PROVIDER, CHAT_MODEL
 
 class ConversationMemory:
     """Manages memory for AI conversations to provide context and reduce redundant API calls."""
@@ -164,9 +158,14 @@ class ConversationMemory:
             return self.embeddings_cache[text]
 
         try:
-            embedding = generate_embed(text)
-            self.embeddings_cache[text] = embedding
-            return embedding
+            embedding_result = generate_embed(text)
+            if embedding_result and len(embedding_result) > 0:
+                embedding = embedding_result[0]
+                self.embeddings_cache[text] = embedding
+                return embedding
+            else:
+                self.logger.warning(f"Empty embedding result for text: {text[:50]}...")
+                return []
         except Exception as e:
             self.logger.error(f"Error generating embedding: {e}")
             return []
@@ -560,6 +559,25 @@ def track_performance(provider_key: str):
     return decorator
 
 
+def _get_embedding_dimensions() -> int:
+    """Get the embedding dimensions based on the current embedding model and provider.
+
+    Returns:
+        int: Number of dimensions for the embedding model.
+    """
+    if AI_EMBEDDING_PROVIDER == "openai":
+        model_dimensions = {
+            "text-embedding-ada-002": 1536,
+            "text-embedding-3-small": 1536,
+            "text-embedding-3-large": 3072,
+        }
+        return model_dimensions.get(EMBEDDING_MODEL, 1536)
+    elif AI_EMBEDDING_PROVIDER == "google":
+        return 768
+    else:
+        return 384
+
+
 def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
     """Generate embeddings for a single text or list of texts.
 
@@ -585,15 +603,17 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
     else:
         logger.debug(f"generate_embed called with batch of {len(text)} texts")
 
+    embedding_dims = _get_embedding_dimensions()
+
     if not EMBEDDING_MODEL:
         logger.warning("EMBEDDING_MODEL not set in environment variables")
         if isinstance(text, str):
-            return [[0.0] * 384]
+            return [[0.0] * embedding_dims]
         else:
-            return [[0.0] * 384] * len(text)
+            return [[0.0] * embedding_dims] * len(text)
 
-    single_input = isinstance(text, str)
-    if single_input:
+    original_input_was_string = isinstance(text, str)
+    if original_input_was_string:
         text = [text]
 
     if not text or (isinstance(text, list) and len(text) == 0):
@@ -626,7 +646,7 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
         result = [None] * len(text)
         for i, embedding in cache_hits:
             result[i] = embedding
-        return result[0] if single_input else result
+        return result
 
     texts_to_process = [t for _, t in cache_misses]
 
@@ -638,51 +658,111 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
                 logger.debug("Using Google provider for embeddings")
             if not AI_EMBEDDING_API_KEY or AI_EMBEDDING_API_KEY.lower() == "none":
                 logger.warning("AI_EMBEDDING_API_KEY not set for Google provider")
-                embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+                embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
             else:
                 try:
                     if is_small_batch:
-                        logger.debug("Calling Google API for embeddings")
-                    result = genai.embed_content(
-                        model=EMBEDDING_MODEL,
-                        content=texts_to_process
-                    )
-                    if is_small_batch:
-                        logger.debug("Google API returned embeddings successfully")
-                    embeddings_for_misses = result["embeddings"]
+                        logger.debug(f"Calling Google API for embeddings with model {EMBEDDING_MODEL}")
+
+                    if not EMBEDDING_MODEL:
+                        logger.error("EMBEDDING_MODEL environment variable is required for Google provider. "
+                                   "Please set EMBEDDING_MODEL to a valid Google embedding model such as "
+                                   "'text-embedding-004' or 'embedding-001'")
+                        embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
+                    else:
+                        google_model = EMBEDDING_MODEL
+                        if not google_model.startswith("models/"):
+                            google_model = f"models/{google_model}"
+
+                        batch_size = 10
+                        all_embeddings = []
+
+                        for i in range(0, len(texts_to_process), batch_size):
+                            batch = texts_to_process[i:i+batch_size]
+                            if is_small_batch:
+                                logger.debug(f"Processing Google batch {i//batch_size + 1} with {len(batch)} texts")
+
+                            if i > 0 and EMBEDDING_API_DELAY_MS > 0:
+                                time.sleep(EMBEDDING_API_DELAY_MS / 1000.0)
+
+                            try:
+                                result = genai.embed_content(
+                                    model=google_model,
+                                    content=batch
+                                )
+
+                                if isinstance(result, dict) and "embedding" in result:
+                                    batch_embeddings = [result["embedding"]]
+                                elif isinstance(result, dict) and "embeddings" in result:
+                                    batch_embeddings = result["embeddings"]
+                                elif hasattr(result, 'embedding'):
+                                    batch_embeddings = [result.embedding]
+                                elif hasattr(result, 'embeddings'):
+                                    batch_embeddings = result.embeddings
+                                else:
+                                    logger.error(f"Unexpected Google API response format: {type(result)}")
+                                    batch_embeddings = [[0.0] * embedding_dims] * len(batch)
+
+                                all_embeddings.extend(batch_embeddings)
+
+                                if is_small_batch:
+                                    logger.debug(f"Google batch processed successfully, got {len(batch_embeddings)} embeddings")
+
+                            except Exception as batch_error:
+                                logger.error(f"Google API batch error: {str(batch_error)}")
+                                all_embeddings.extend([[0.0] * embedding_dims] * len(batch))
+
+                        embeddings_for_misses = all_embeddings
+
+                        if is_small_batch:
+                            logger.debug(f"Google API returned {len(embeddings_for_misses)} embeddings successfully")
+
                 except Exception as e:
                     logger.error(f"Google API error with model {EMBEDDING_MODEL}: {str(e)}")
-                    embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+                    logger.error(f"Error details: {type(e).__name__}: {str(e)}")
+                    embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
         elif AI_EMBEDDING_PROVIDER == "openai":
             if is_small_batch:
                 logger.debug("Using OpenAI provider for embeddings")
             if not openai_client:
                 logger.warning("OpenAI client not initialized for embeddings")
-                embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+                embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
             else:
                 try:
                     if is_small_batch:
-                        logger.debug("Calling OpenAI API for embeddings")
+                        logger.debug(f"Calling OpenAI API for embeddings with model {EMBEDDING_MODEL}")
 
                     batch_size = 100
                     all_embeddings = []
 
                     for i in range(0, len(texts_to_process), batch_size):
                         batch = texts_to_process[i:i+batch_size]
+                        if is_small_batch:
+                            logger.debug(f"Processing batch {i//batch_size + 1} with {len(batch)} texts")
+
+                        if i > 0 and EMBEDDING_API_DELAY_MS > 0:
+                            time.sleep(EMBEDDING_API_DELAY_MS / 1000.0)
+
                         response = openai_client.embeddings.create(
                             model=EMBEDDING_MODEL,
-                            input=batch
+                            input=batch,
+                            encoding_format="float"
                         )
+
                         batch_embeddings = [item.embedding for item in response.data]
                         all_embeddings.extend(batch_embeddings)
 
+                        if is_small_batch:
+                            logger.debug(f"Batch processed successfully, got {len(batch_embeddings)} embeddings")
+
                     if is_small_batch:
-                        logger.debug("OpenAI API returned embeddings successfully")
+                        logger.debug(f"OpenAI API returned {len(all_embeddings)} embeddings successfully")
 
                     embeddings_for_misses = all_embeddings
                 except Exception as e:
                     logger.error(f"OpenAI API error with model {EMBEDDING_MODEL}: {str(e)}")
-                    embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+                    logger.error(f"Error details: {type(e).__name__}: {str(e)}")
+                    embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
         else:
             if is_small_batch:
                 logger.debug("Using Ollama provider for embeddings")
@@ -709,10 +789,10 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
                     for embedding in response.embeddings:
                         if not isinstance(embedding, list):
                             logger.warning(f"Embedding has wrong type: {type(embedding)}, using default embedding")
-                            embeddings_for_misses.append([0.0] * 384)
+                            embeddings_for_misses.append([0.0] * embedding_dims)
                         elif len(embedding) == 0:
                             logger.warning("Embedding is empty, using default embedding")
-                            embeddings_for_misses.append([0.0] * 384)
+                            embeddings_for_misses.append([0.0] * embedding_dims)
                         else:
                             if isinstance(embedding[0], list):
                                 embeddings_for_misses.append(embedding)
@@ -720,10 +800,10 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
                                 embeddings_for_misses.append(embedding)
                 else:
                     logger.warning("Ollama response does not have embeddings attribute")
-                    embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+                    embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
             except ollama.ResponseError as e:
                 logger.error(f"Ollama ResponseError: {str(e)}")
-                embeddings_for_misses = [[0.0] * 384] * len(texts_to_process)
+                embeddings_for_misses = [[0.0] * embedding_dims] * len(texts_to_process)
 
         for (i, t), embedding in zip(cache_misses, embeddings_for_misses):
             cache_key = cache_keys[i]
@@ -741,11 +821,12 @@ def generate_embed(text: Union[str, List[str]]) -> List[List[float]]:
             for key in keys_to_remove:
                 del generate_embed._embedding_cache[key]
 
-        return result[0] if single_input else result
+        return result
 
     except Exception as e:
         logger.error(f"Unexpected error in generate_embed: {str(e)}")
-        return [[0.0] * 384] * len(text)
+        logger.error(f"Error details: {type(e).__name__}: {str(e)}", exc_info=True)
+        return [[0.0] * embedding_dims] * len(text)
 
 
 def validate_messages(messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -1972,6 +2053,8 @@ def generate_description(
 
     try:
         if AI_DESCRIPTION_PROVIDER == "google":
+            if DESCRIPTION_API_DELAY_MS > 0:
+                time.sleep(DESCRIPTION_API_DELAY_MS / 1000.0)
             response = _generate_description_google(prompt, temperature, max_tokens)
         elif AI_DESCRIPTION_PROVIDER == "openai":
             response = _generate_description_openai(prompt, temperature, max_tokens)

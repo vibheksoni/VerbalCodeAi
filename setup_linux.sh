@@ -201,6 +201,14 @@ EMBEDDING_CACHE_SIZE=1000
 # Similarity threshold for embedding search (lower values return more results but may be less relevant)
 EMBEDDING_SIMILARITY_THRESHOLD=0.05
 
+# API Rate Limiting Settings
+# Delay in milliseconds between embedding API calls to prevent rate limiting
+# Recommended: 100ms for Google, 0ms for OpenAI/Ollama (set to 0 to disable)
+EMBEDDING_API_DELAY_MS=100
+# Delay in milliseconds between description generation API calls to prevent rate limiting
+# Recommended: 100ms for Google, 0ms for OpenAI/Ollama (set to 0 to disable)
+DESCRIPTION_API_DELAY_MS=100
+
 # Maximum number of threads to use (will be calculated automatically if not set)
 # MAX_THREADS=16
 
