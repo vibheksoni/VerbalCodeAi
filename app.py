@@ -256,10 +256,21 @@ class VerbalCodeAI:
                 + Style.RESET_ALL
             )
 
+        print(
+            Fore.YELLOW
+            + "WARNING: Consider using a smaller OpenRouter model for descriptions (Free One) to reduce costs."
+            + Style.RESET_ALL
+        )
+        print(
+            Fore.YELLOW
+            + "WARNING: Chat with AI and Max Chat Mode are expensive. Use Agent Mode for cheaper and faster responses."
+            + Style.RESET_ALL
+        )
+        
         print(Fore.GREEN + "1. " + Style.BRIGHT + "Index Code" + Style.RESET_ALL)
-        print(Fore.GREEN + "2. " + Style.BRIGHT + "Chat with AI" + Style.RESET_ALL)
-        print(Fore.GREEN + "3. " + Style.BRIGHT + "Max Chat Mode (Token Intensive)" + Style.RESET_ALL)
-        print(Fore.GREEN + "4. " + Style.BRIGHT + "Agent Mode" + Style.RESET_ALL)
+        print(Fore.GREEN + "2. " + Style.BRIGHT + "Chat with AI (Expensive)" + Style.RESET_ALL)
+        print(Fore.GREEN + "3. " + Style.BRIGHT + "Max Chat Mode (Expensive)" + Style.RESET_ALL)
+        print(Fore.GREEN + "4. " + Style.BRIGHT + "Agent Mode (Cheapest Option)" + Style.RESET_ALL)
         print(Fore.GREEN + "5. " + Style.BRIGHT + "Force Reindex" + Style.RESET_ALL)
         print(Fore.GREEN + "6. " + Style.BRIGHT + "View Indexed Files" + Style.RESET_ALL)
         print(Fore.GREEN + "7. " + Style.BRIGHT + "View Project Info" + Style.RESET_ALL)
