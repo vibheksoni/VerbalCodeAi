@@ -266,7 +266,7 @@ class VerbalCodeAI:
             + "WARNING: Chat with AI and Max Chat Mode are expensive. Use Agent Mode for cheaper and faster responses."
             + Style.RESET_ALL
         )
-        
+
         print(Fore.GREEN + "1. " + Style.BRIGHT + "Index Code" + Style.RESET_ALL)
         print(Fore.GREEN + "2. " + Style.BRIGHT + "Chat with AI (Expensive)" + Style.RESET_ALL)
         print(Fore.GREEN + "3. " + Style.BRIGHT + "Max Chat Mode (Expensive)" + Style.RESET_ALL)
@@ -275,6 +275,7 @@ class VerbalCodeAI:
         print(Fore.GREEN + "6. " + Style.BRIGHT + "View Indexed Files" + Style.RESET_ALL)
         print(Fore.GREEN + "7. " + Style.BRIGHT + "View Project Info" + Style.RESET_ALL)
         print(Fore.GREEN + "8. " + Style.BRIGHT + "Recent Projects" + Style.RESET_ALL)
+        print(Fore.GREEN + "9. " + Style.BRIGHT + "Enhance Prompt" + Style.RESET_ALL)
 
         print(Fore.CYAN + "-" * 50 + Style.RESET_ALL)
         print(Fore.CYAN + Style.BRIGHT + "Settings" + Style.RESET_ALL)
@@ -284,24 +285,24 @@ class VerbalCodeAI:
             if self.enable_markdown_rendering
             else f"{Fore.RED}Disabled{Style.RESET_ALL}"
         )
-        print(f"{Fore.GREEN}9. {Style.BRIGHT}Toggle Markdown Rendering{Style.RESET_ALL} [{markdown_status}]")
+        print(f"{Fore.GREEN}10. {Style.BRIGHT}Toggle Markdown Rendering{Style.RESET_ALL} [{markdown_status}]")
 
         thinking_status: str = (
             f"{Fore.GREEN}Enabled{Style.RESET_ALL}"
             if self.show_thinking_blocks
             else f"{Fore.RED}Disabled{Style.RESET_ALL}"
         )
-        print(f"{Fore.GREEN}10. {Style.BRIGHT}Toggle Thinking Blocks{Style.RESET_ALL} [{thinking_status}]")
+        print(f"{Fore.GREEN}11. {Style.BRIGHT}Toggle Thinking Blocks{Style.RESET_ALL} [{thinking_status}]")
 
         streaming_status: str = (
             f"{Fore.GREEN}Enabled{Style.RESET_ALL}"
             if self.enable_streaming_mode
             else f"{Fore.RED}Disabled{Style.RESET_ALL}"
         )
-        print(f"{Fore.GREEN}11. {Style.BRIGHT}Toggle Streaming Mode{Style.RESET_ALL} [{streaming_status}]")
+        print(f"{Fore.GREEN}12. {Style.BRIGHT}Toggle Streaming Mode{Style.RESET_ALL} [{streaming_status}]")
 
-        print(f"{Fore.GREEN}12. {Style.BRIGHT}Clear Screen{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}13. {Style.BRIGHT}Exit{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}13. {Style.BRIGHT}Clear Screen{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}14. {Style.BRIGHT}Exit{Style.RESET_ALL}")
 
         print(Fore.CYAN + "=" * 50 + Style.RESET_ALL)
 
@@ -590,6 +591,85 @@ class VerbalCodeAI:
             except Exception as e:
                 self.logger.error(f"Error in Agent Mode: {e}", exc_info=True)
                 print(f"\n{Fore.RED}Error in Agent Mode: {e}{Style.RESET_ALL}")
+
+    async def enhance_prompt(self) -> None:
+        """Run the prompt enhancement feature."""
+        if not self.indexer:
+            print(f"\n{Fore.RED}Error: No code has been indexed yet. Please index a directory first.{Style.RESET_ALL}")
+            return
+
+        print("\n" + Fore.CYAN + "=" * 50 + Style.RESET_ALL)
+        print(Fore.CYAN + Style.BRIGHT + "Enhance Prompt" + Style.RESET_ALL)
+        print(Fore.CYAN + "=" * 50 + Style.RESET_ALL)
+        print(f"{Fore.YELLOW}This feature will analyze your codebase and enhance your prompt with relevant context.")
+        print(f"{Fore.YELLOW}The enhanced prompt will include:")
+        print(f"{Fore.YELLOW}  • Expanded and clarified task description")
+        print(f"{Fore.YELLOW}  • Relevant code snippets and file references")
+        print(f"{Fore.YELLOW}  • Technical context and constraints from the codebase")
+        print(f"{Fore.YELLOW}  • Implementation guidance based on existing patterns")
+        print(f"{Fore.YELLOW}Type your initial prompt/instruction below.{Style.RESET_ALL}")
+
+        while True:
+            provider, model = get_current_provider()
+            print(
+                f"\n{Fore.YELLOW}Current provider: {Fore.CYAN}{provider.upper()}"
+                f"{Fore.YELLOW}, model: {Fore.CYAN}{model}{Style.RESET_ALL}"
+            )
+            print(
+                f"\n{Fore.GREEN}Enter your initial prompt (or '{Fore.RED}exit{Fore.GREEN}' to return to menu):{Style.RESET_ALL}"
+            )
+            user_input: str = input(f"{Fore.CYAN}> {Style.RESET_ALL}").strip()
+
+            if user_input.lower() == "exit":
+                break
+
+            if not user_input:
+                continue
+
+            try:
+                print(f"\n{Fore.YELLOW}Analyzing codebase and enhancing your prompt...{Style.RESET_ALL}")
+                self.logger.info(f"[STAT] Enhancing prompt: {user_input[:50]}...")
+
+                if not hasattr(self, 'prompt_enhancer') or not self.prompt_enhancer:
+                    from mods.code.prompt_enhancer import PromptEnhancer
+                    self.prompt_enhancer = PromptEnhancer(self.indexer)
+
+                enhanced_prompt = await self.prompt_enhancer.enhance_prompt(user_input)
+
+                terminal_width: int
+                terminal_width, _ = get_terminal_size()
+                print(f"\n{Fore.BLUE}{Style.BRIGHT}✧ ENHANCED PROMPT ✧{Style.RESET_ALL}")
+                print(f"{Fore.BLUE}{'─' * 80}{Style.RESET_ALL}")
+
+                if self.enable_markdown_rendering:
+                    rendered_content = render_markdown(enhanced_prompt, width=terminal_width-2)
+                    print(rendered_content)
+                else:
+                    print(enhanced_prompt)
+
+                print(f"{Fore.BLUE}{'─' * 80}{Style.RESET_ALL}")
+
+                print(f"\n{Fore.CYAN}Options:{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}1. {Style.BRIGHT}Continue with another prompt{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}2. {Style.BRIGHT}Save enhanced prompt to file{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}3. {Style.BRIGHT}Return to main menu{Style.RESET_ALL}")
+
+                choice = input(f"\n{Fore.YELLOW}Enter your choice (1-3): {Style.RESET_ALL}").strip()
+
+                if choice == "2":
+                    filename = f"enhanced_prompt_{int(time.time())}.md"
+                    try:
+                        with open(filename, "w", encoding="utf-8") as f:
+                            f.write(enhanced_prompt)
+                        print(f"{Fore.GREEN}Enhanced prompt saved to: {filename}{Style.RESET_ALL}")
+                    except Exception as e:
+                        print(f"{Fore.RED}Error saving file: {e}{Style.RESET_ALL}")
+                elif choice == "3":
+                    break
+
+            except Exception as e:
+                self.logger.error(f"Error in Enhance Prompt: {e}", exc_info=True)
+                print(f"\n{Fore.RED}Error enhancing prompt: {e}{Style.RESET_ALL}")
 
     def chat_with_ai(self, max_chat_mode: bool = False) -> None:
         """Chat with the AI about code.
@@ -1136,7 +1216,7 @@ class VerbalCodeAI:
                 self.index_outdated = not index_status.get('complete', False)
 
             self.display_menu()
-            choice = input(f"{Fore.YELLOW}Enter your choice (1-13): {Style.RESET_ALL}").strip()
+            choice = input(f"{Fore.YELLOW}Enter your choice (1-14): {Style.RESET_ALL}").strip()
 
             actions = {
                 "1": lambda: self.index_directory(),
@@ -1147,14 +1227,15 @@ class VerbalCodeAI:
                 "6": lambda: self.view_indexed_files(),
                 "7": lambda: self.view_project_info(),
                 "8": lambda: self.view_recent_projects(),
-                "9": lambda: self.toggle_markdown_rendering(),
-                "10": lambda: self.toggle_thinking_blocks(),
-                "11": lambda: self.toggle_streaming_mode(),
-                "12": lambda: clear_screen(),
+                "9": lambda: asyncio.run(self.enhance_prompt()),
+                "10": lambda: self.toggle_markdown_rendering(),
+                "11": lambda: self.toggle_thinking_blocks(),
+                "12": lambda: self.toggle_streaming_mode(),
+                "13": lambda: clear_screen()
             }
 
-            if choice in actions or choice == "13":
-                if choice == "13":
+            if choice in actions or choice == "14":
+                if choice == "14":
                     clear_screen()
                     print(f"\n{Fore.GREEN}Exiting VerbalCodeAI. Goodbye!{Style.RESET_ALL}")
                     break
@@ -1162,7 +1243,7 @@ class VerbalCodeAI:
                     clear_screen()
                     actions[choice]()
             else:
-                print(f"\n{Fore.RED}Invalid choice. Please enter a number between 1 and 13.{Style.RESET_ALL}")
+                print(f"\n{Fore.RED}Invalid choice. Please enter a number between 1 and 14.{Style.RESET_ALL}")
 
 def run_http_server(port: int, allow_all_origins: bool = None) -> None:
     """Run the HTTP API server.
