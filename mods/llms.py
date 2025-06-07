@@ -67,6 +67,9 @@ AI_EMBEDDING_API_KEY: str = os.getenv("AI_EMBEDDING_API_KEY")
 AI_DESCRIPTION_API_KEY: str = os.getenv("AI_DESCRIPTION_API_KEY")
 AI_AGENT_BUDDY_API_KEY: str = os.getenv("AI_AGENT_BUDDY_API_KEY")
 
+AZURE_OPENAI_ENDPOINT: str = os.getenv("AZURE_OPENAI_ENDPOINT")
+OPENAI_API_VERSION: str = os.getenv("OPENAI_API_VERSION")
+
 CHAT_MODEL: str = os.getenv("CHAT_MODEL")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
 DESCRIPTION_MODEL: str = os.getenv("DESCRIPTION_MODEL")
@@ -352,6 +355,23 @@ def parse_thinking_tokens(response: str) -> Tuple[str, ThinkTokens, str]:
 
     return response, tokens_info, clean_response
 
+def create_openai_client(api_key: str) -> openai.OpenAI:
+    """Create and return an OpenAI client instance."""
+
+    if is_defined(AZURE_OPENAI_ENDPOINT) and is_defined(OPENAI_API_VERSION):
+        return openai.AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_version=OPENAI_API_VERSION
+        )
+    else:
+        return openai.OpenAI(
+            api_key=api_key
+        )
+
+def is_defined(value: str) -> bool:
+    """Check if a string value is defined (not None or empty)."""
+    return value is not None and value.strip() != "" and value.lower() != "none"
 
 PERFORMANCE_METRICS: Dict[
     str, Union[int, float, Dict[str, Dict[str, Union[int, float]]]]
@@ -399,7 +419,7 @@ if (AI_CHAT_PROVIDER == 'openai' or
         api_key = AI_DESCRIPTION_API_KEY
 
     if api_key:
-        openai_client = openai.OpenAI(api_key=api_key)
+        openai_client = create_openai_client(api_key)
         logger.debug("OpenAI client initialized")
 
 anthropic_client = None
@@ -1234,7 +1254,7 @@ def _generate_response_openai(
 
     try:
         if api_key or not openai_client:
-            openai_client = openai.OpenAI(api_key=chat_api_key)
+            openai_client = create_openai_client(chat_api_key)
             logger.debug("OpenAI client initialized or reinitialized with provided API key")
 
         formatted_messages = []
@@ -2273,7 +2293,7 @@ def _generate_description_openai(
 
     try:
         if not openai_client:
-            openai_client = openai.OpenAI(api_key=AI_DESCRIPTION_API_KEY)
+            openai_client = create_openai_client(AI_DESCRIPTION_API_KEY)
             logger.debug("OpenAI client initialized for description generation")
 
         formatted_messages = [{"role": "user", "content": prompt}]
@@ -2587,3 +2607,4 @@ def add_feedback(chat_id: str, feedback: str, project_path: str) -> bool:
     except Exception as e:
         logger.error(f"Error adding feedback: {e}")
         return False
+
