@@ -423,6 +423,13 @@ AI_EMBEDDING_PROVIDER=ollama
 AI_DESCRIPTION_PROVIDER=ollama
 AI_AGENT_BUDDY_PROVIDER=ollama
 
+# Azure OpenAI
+# when using openai as a provider and you want to use Azure OpenAI, set these variables
+# the endpoint should be in the format: https://<your-resource-name>.openai.azure.com/
+AZURE_OPENAI_ENDPOINT=None
+# The API version to access your OpenAI resource. E.g. 2024-07-01-preview
+OPENAI_API_VERSION=None
+
 # API Keys for each functionality (only needed if using that provider)
 # The same key will be used for the selected provider in each category
 AI_CHAT_API_KEY=None

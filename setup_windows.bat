@@ -129,6 +129,13 @@ if not exist .env (
         echo AI_DESCRIPTION_PROVIDER=ollama
         echo AI_AGENT_BUDDY_PROVIDER=ollama
         echo.
+        echo # Azure OpenAI
+        echo # when using openai as a provider and you want to use Azure OpenAI, set these variables. Both values must be defined
+        echo # the endpoint should be in the format: https://<your-resource-name>.openai.azure.com/
+        echo AZURE_OPENAI_ENDPOINT=None
+        echo # The API version to access your OpenAI resource. E.g. 2024-07-01-preview
+        echo OPENAI_API_VERSION=None
+        echo.
         echo # API Keys for each functionality (only needed if using that provider)
         echo # The same key will be used for the selected provider in each category
         echo AI_CHAT_API_KEY=None
